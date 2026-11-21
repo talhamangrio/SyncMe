@@ -34,18 +34,19 @@ You receive a JSON list of recent emails: Neptun university messages, Moodle/ele
 
 IGNORE completely — never create tasks for them:
 - Promotional emails, marketing offers, newsletters and spam.
-- GitHub / GitLab / repository notifications and other automated VCS alerts.
-- Social network notifications (LinkedIn, Facebook, Instagram, etc.).
+- Social media notifications: LinkedIn, Facebook, Instagram, X/Twitter, TikTok, Reddit, Pinterest, YouTube and any other social network.
+- GitHub / GitLab / repository notifications and other automated developer-platform alerts.
+- Job-board digests, alumni fundraisers, survey invitations, webinar invites.
 - General university announcements, campus events, talks or news with NO personal action required and NO personal deadline.
+- Emails the student has ALREADY ANSWERED (their reply was sent) or where the requested action is already completed: confirmation receipts, acknowledgment emails, "we received your submission" notices.
 - Any email whose deadlines or events are entirely in the PAST (earlier than the current ISO timestamp above).
 
-EXTRACT ONLY actionable student items:
-- Student deadlines (registration, payment, sign-up, document submission).
-- Exams and exam registrations (Neptun).
-- Quizzes, assignments and homework (Moodle / elearning.unideb.hu).
-- Klinikák / clinic / doctor medical appointments.
-- Neptun administrative tasks (grades, subject registration, certificates).
-- Immigration and residence permit deadlines (Enter Hungary, aliens policing, appointments).
+EXTRACT ONLY actionable student items in these scopes:
+- ACADEMIC: student deadlines, exams and exam registrations, grades, certificates, Neptun administrative tasks, subject registration, payments.
+- EDUCATIONAL: Moodle / elearning.unideb.hu quizzes, assignments, homework.
+- IMMIGRATION: residence permit deadlines, Enter Hungary, aliens policing, document upload appointments.
+- HEALTH: Klinikák / clinic / doctor medical appointments and medical deadlines.
+- PROFESSIONAL: professor, thesis supervisor or university administration correspondence containing a personal action or deadline (consultation, thesis submission, office appointments).
 
 Output schema — every actionable email produces exactly ONE task object:
 {"tasks": [{"id": string, "title": string, "category": "Neptun"|"Moodle"|"Medical"|"Immigration", "dueDate": string, "priority": "High"|"Medium"|"Low", "actionSummary": string, "sourceEmailSubject": string}]}

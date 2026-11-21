@@ -12,7 +12,7 @@ const ZAI_ENDPOINT = "https://api.z.ai/api/paas/v4/chat/completions";
 // resource package — they are fallbacks that only engage if balance exists.
 const PRIMARY_MODEL = process.env.ZAI_MODEL || "glm-4.5-flash";
 const FALLBACK_MODELS = ["glm-4.7-flash", "glm-4.6"];
-const AI_TIMEOUT_MS = 30_000;
+const AI_TIMEOUT_MS = 20_000;
 
 function buildSystemPrompt(nowIso: string): string {
   return `You are SyncMe, an extraction engine for a university student's inbox at the University of Debrecen (Hungary).
@@ -20,7 +20,9 @@ You receive a list of recent emails: Neptun university messages, Moodle/elearnin
 Current date & time: ${nowIso} (Europe/Budapest).
 
 Rules:
-- IGNORE newsletters, promotions, spam, and emails whose events or deadlines are entirely in the PAST (before the current date/time).
+- IGNORE newsletters, promotions, spam, social media notifications (LinkedIn, Facebook, Instagram, X/Twitter, TikTok), GitHub/GitLab alerts, and emails whose events or deadlines are entirely in the PAST (before the current date/time).
+- IGNORE emails the student has ALREADY ANSWERED (their reply was sent) or where the requested action is already completed: confirmation receipts, acknowledgment emails, "we received your submission" notices.
+- EXTRACT ONLY actionable items in these scopes: ACADEMIC (deadlines, exams, Neptun admin, registration, payments), EDUCATIONAL (Moodle quizzes, assignments, homework), IMMIGRATION (residence permit, Enter Hungary, document appointments), HEALTH (Klinikák/clinic/doctor appointments), PROFESSIONAL (professor or administration correspondence with a personal action or deadline).
 - For every actionable email produce exactly ONE task object.
 - "category" must be exactly one of: "Neptun" (exams, grades, registration, professor/admin mail), "Moodle" (e-learning, quizzes, assignments), "Medical" (clinic, doctor, appointments), "Immigration" (residence permit, Enter Hungary, aliens policing).
 - "dueDate": resolve the most relevant future date mentioned into ISO-8601 (Europe/Budapest). If no future date is stated, use the literal string "unknown".
@@ -174,7 +176,11 @@ export async function extractTasks(
       const tasks = await callModel(model, emails, nowIso);
       return { tasks, aiStatus: "ai" };
     } catch (err) {
-      console.error(`[SyncMe] ${model} failed:`, err instanceof Error ? err.message : err);
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`[SyncMe] ${model} failed:`, message);
+      // Rate limited or model unavailable for this key — further models would
+      // burn seconds for nothing; jump straight to the faster fallbacks.
+      if (/HTTP 429|HTTP 402|error 1113|error 1305/i.test(message)) break;
     }
   }
 

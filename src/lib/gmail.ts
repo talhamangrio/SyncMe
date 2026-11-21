@@ -7,8 +7,42 @@ import type { RawEmail } from "@/lib/types";
 
 export const GMAIL_SCOPES = "openid email profile https://www.googleapis.com/auth/gmail.readonly";
 
-export const GMAIL_SEARCH_QUERY =
-  "newer_than:30d (neptun OR unideb OR exam OR quiz OR appointment OR klinika OR immigration OR deadline)";
+/**
+ * Only student-relevant mail: academic, educational, immigration, health and
+ * professional correspondence. Social networks, code forges, marketing and
+ * promotional categories are excluded at the query level so they never even
+ * reach the AI extractor.
+ */
+export const GMAIL_SEARCH_QUERY = [
+  "newer_than:30d",
+  "(neptun OR unideb OR exam OR quiz OR appointment OR klinika OR immigration OR deadline OR professor OR thesis OR assignment OR homework OR consultation OR residence OR permit OR faculty OR college)",
+  "-from:linkedin.com",
+  "-from:facebookmail.com",
+  "-from:facebook.com",
+  "-from:twitter.com",
+  "-from:x.com",
+  "-from:instagram.com",
+  "-from:tiktok.com",
+  "-from:github.com",
+  "-from:gitlab.com",
+  "-from:medium.com",
+  "-from:reddit.com",
+  "-from:quora.com",
+  "-from:pinterest.com",
+  "-from:youtube.com",
+  "-from:netflix.com",
+  "-from:spotify.com",
+  "-in:chats",
+  "-category:promotions",
+  "-category:social",
+].join(" ");
+
+/** Query used to detect emails the student has already answered. */
+const SENT_SEARCH_QUERY = "in:sent newer_than:30d";
+
+/** Noise senders dropped defensively even if the Gmail query lets them through. */
+const NOISE_SENDER =
+  /linkedin|facebook|twitter|\bx\.com|instagram|tiktok|github|gitlab|medium\.com|reddit|quora|pinterest|youtube|netflix|spotify|noreply.*newsletter|mailer-daemon/i;
 
 export function googleOAuthConfigured(): boolean {
   return Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
@@ -59,13 +93,13 @@ export function sessionCookieOptions(maxAge: number) {
   };
 }
 
-export function buildGoogleAuthUrl(redirectUri: string): string {
+export function buildGoogleAuthUrl(redirectUri: string, prompt: "consent" | "none" = "consent"): string {
   const params = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID ?? "",
     redirect_uri: redirectUri,
     response_type: "code",
     access_type: "offline",
-    prompt: "consent",
+    prompt,
     scope: GMAIL_SCOPES,
   });
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
@@ -222,41 +256,102 @@ async function gmailFetch(token: string, url: string): Promise<Response> {
 }
 
 /**
+ * Run async work over a list with bounded concurrency — parallel without
+ * hammering the Gmail API (each messages.get costs quota units).
+ */
+async function mapWithLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    for (;;) {
+      const index = cursor++;
+      if (index >= items.length) return;
+      out[index] = await fn(items[index]).catch(() => null as unknown as R);
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
+
+/** Normalize a subject so "Re: Re: FWD: Exam registration" matches "exam registration". */
+function normalizeSubject(subject: string): string {
+  return subject
+    .replace(/^(?:\s*(?:re|fwd?|aw|sv)\s*:)+/gi, "")
+    .replace(/\s+/g, "")
+    .toLowerCase();
+}
+
+/**
+ * Subjects of emails the student already answered (their reply is in Sent).
+ * A replied thread means the action was taken — SyncMe skips those emails.
+ */
+async function fetchAnsweredSubjects(token: string, maxResults = 40): Promise<Set<string>> {
+  const url = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(
+    SENT_SEARCH_QUERY,
+  )}&maxResults=${maxResults}&format=metadata&metadataHeaders=Subject`;
+  const res = await gmailFetch(token, url);
+  if (!res.ok) {
+    console.error(`[SyncMe Gmail] sent-box scan failed: HTTP ${res.status} — answered-filter skipped`);
+    return new Set();
+  }
+  const list = (await res.json()) as { messages?: GmailMessage[] };
+  const subjects = (list.messages ?? [])
+    .map((m) => m.payload?.headers?.find((h) => h.name.toLowerCase() === "subject")?.value ?? "")
+    .filter(Boolean);
+  return new Set(subjects.map(normalizeSubject));
+}
+
+/**
  * Search the student's inbox for university-related email (last 30 days) and
  * fetch full message details: Subject, From, Date and decoded plain-text body.
+ *
+ * Speed + relevance hardening:
+ *   - inbox search and sent-box scan run CONCURRENTLY,
+ *   - individual messages are fetched in parallel (6 at a time),
+ *   - emails the student already answered are skipped,
+ *   - social-media / forge / marketing senders are dropped before the AI runs.
  */
 export async function fetchUniversityEmails(token: string, maxResults = 12): Promise<RawEmail[]> {
   const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(
     GMAIL_SEARCH_QUERY,
   )}&maxResults=${maxResults}`;
-  const listRes = await gmailFetch(token, listUrl);
+
+  const [listRes, answered] = await Promise.all([
+    gmailFetch(token, listUrl),
+    fetchAnsweredSubjects(token).catch(() => new Set<string>()),
+  ]);
   if (!listRes.ok) throw new Error(`Gmail search failed: HTTP ${listRes.status}`);
   const list = (await listRes.json()) as { messages?: GmailMessageRef[] };
+  const refs = (list.messages ?? []).filter(
+    (ref, i, arr) => arr.findIndex((r) => r.id === ref.id) === i, // dedupe thread hits
+  );
 
-  const emails: RawEmail[] = [];
-  for (const ref of list.messages ?? []) {
-    try {
-      const res = await gmailFetch(
-        token,
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${ref.id}?format=full`,
-      );
-      if (!res.ok) continue;
-      const msg = (await res.json()) as GmailMessage;
-      const headers = msg.payload?.headers ?? [];
-      const header = (name: string) =>
-        headers.find((h) => h.name.toLowerCase() === name)?.value ?? "";
-      const dateHeader = header("date");
-      const parsedDate = dateHeader ? new Date(dateHeader) : new Date();
-      emails.push({
-        id: msg.id,
-        subject: header("subject") || "(no subject)",
-        from: header("from") || "unknown",
-        date: Number.isNaN(parsedDate.getTime()) ? new Date().toISOString() : parsedDate.toISOString(),
-        snippet: (extractPlainText(msg) || msg.snippet || "").slice(0, 2000),
-      });
-    } catch {
-      // Skip individual message failures — never fail the whole sync for one email.
-    }
-  }
-  return emails;
+  const fetched = await mapWithLimit(refs, 6, async (ref) => {
+    const res = await gmailFetch(
+      token,
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${ref.id}?format=full`,
+    );
+    if (!res.ok) return null;
+    const msg = (await res.json()) as GmailMessage;
+    const headers = msg.payload?.headers ?? [];
+    const header = (name: string) =>
+      headers.find((h) => h.name.toLowerCase() === name)?.value ?? "";
+    const dateHeader = header("date");
+    const parsedDate = dateHeader ? new Date(dateHeader) : new Date();
+    return {
+      id: msg.id,
+      subject: header("subject") || "(no subject)",
+      from: header("from") || "unknown",
+      date: Number.isNaN(parsedDate.getTime()) ? new Date().toISOString() : parsedDate.toISOString(),
+      snippet: (extractPlainText(msg) || msg.snippet || "").slice(0, 1200),
+    } satisfies RawEmail;
+  });
+
+  return (fetched.filter((e): e is RawEmail => e !== null)
+    .filter((e) => !NOISE_SENDER.test(e.from))
+    .filter((e) => !answered.has(normalizeSubject(e.subject))));
 }
