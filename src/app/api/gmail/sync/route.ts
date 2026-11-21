@@ -7,15 +7,31 @@ import {
   sessionCookieOptions,
 } from "@/lib/gmail";
 import { dedupeTasks, extractTasks } from "@/lib/zai";
+import { extractTasksGemini } from "@/lib/gemini";
+import type { RawEmail, SyncTask } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * Gemini (gemini-2.5-flash) is the PRIMARY classifier/extractor. When
+ * GEMINI_API_KEY is missing or the call fails, extractTasksGemini returns
+ * null and we silently fall back to the existing Z.ai GLM pipeline
+ * (glm-4.5-flash → bundled SDK → deterministic rule engine).
+ */
+async function extractWithFallback(
+  emails: RawEmail[],
+): Promise<{ tasks: SyncTask[]; aiStatus: "ai" | "heuristic" }> {
+  const geminiTasks = await extractTasksGemini(emails).catch(() => null);
+  if (geminiTasks) return { tasks: geminiTasks, aiStatus: "ai" };
+  return extractTasks(emails);
+}
 
 /**
  * GET /api/gmail/sync — fully stateless Gmail pipeline:
  *   1. read the OAuth access token from the httpOnly cookie,
  *   2. query Gmail for university email (last 30 days, max 12),
- *   3. send the list + current ISO date/time to Z.ai (glm-4.7-flash) for
- *      strict-JSON extraction,
+ *   3. extract strict-JSON tasks with Google Gemini (gemini-2.5-flash),
+ *      silently falling back to Z.ai when Gemini is unavailable,
  *   4. return { tasks, emails, aiStatus }.
  *
  * Nothing is persisted: emails live only for the duration of this request.
@@ -37,7 +53,7 @@ export async function GET() {
 
   const attempt = async (accessToken: string) => {
     const emails = await fetchUniversityEmails(accessToken, 12);
-    const { tasks, aiStatus } = await extractTasks(emails);
+    const { tasks, aiStatus } = await extractWithFallback(emails);
     return { emails, tasks: dedupeTasks(tasks), aiStatus };
   };
 
