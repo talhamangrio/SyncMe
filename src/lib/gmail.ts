@@ -21,17 +21,30 @@ const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)(:\
  * /api/auth/google, /api/auth/callback, /api/auth/logout and /api/demo/enter
  * so the Google redirect_uri is always byte-identical across the flow.
  *
- * Precedence: NEXT_PUBLIC_APP_URL → request origin (req.nextUrl.origin).
- * Safety net: if someone leaves NEXT_PUBLIC_APP_URL=http://localhost:3000 in a
- * deployed (Vercel) environment, trust the request origin instead — otherwise
- * every OAuth redirect would point at the visitor's own localhost.
+ * Precedence:
+ *   1. x-forwarded-host / x-forwarded-proto — on Vercel this is EXACTLY the
+ *      domain the student is browsing (syncme-rust.vercel.app, custom domains,
+ *      git-branch deployment URLs). The OAuth loop therefore always stays on
+ *      the domain the visitor came from.
+ *   2. req.nextUrl.origin — local dev and direct access.
+ *   3. NEXT_PUBLIC_APP_URL — last resort, ONLY when the request origin looks
+ *      local (sandbox behind a proxy that hides the real host). Never let a
+ *      configured URL override a real deployed host: a stale NEXT_PUBLIC_APP_URL
+ *      once bounced every OAuth callback to a broken domain (HTTP 500) even
+ *      though the browsed domain was perfectly healthy.
  */
 export function resolveOrigin(req: NextRequest): string {
-  const requestOrigin = req.nextUrl.origin.replace(/\/+$/, "");
-  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/+$/, "");
-  if (configured && (!LOCAL_ORIGIN.test(configured) || LOCAL_ORIGIN.test(requestOrigin))) {
-    return configured;
+  const forwardedHost = req.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
+  if (forwardedHost) {
+    const forwardedProto = req.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() || "https";
+    return `${forwardedProto}://${forwardedHost}`;
   }
+
+  const requestOrigin = req.nextUrl.origin.replace(/\/+$/, "");
+  if (!LOCAL_ORIGIN.test(requestOrigin)) return requestOrigin;
+
+  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/+$/, "");
+  if (configured && !LOCAL_ORIGIN.test(configured)) return configured;
   return requestOrigin;
 }
 
