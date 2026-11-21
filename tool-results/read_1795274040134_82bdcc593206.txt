@@ -1,0 +1,731 @@
+     1→"use client";
+     2→
+     3→import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+     4→import { format } from "date-fns";
+     5→import { motion } from "framer-motion";
+     6→import { toast } from "sonner";
+     7→import {
+     8→  CalendarClock,
+     9→  CalendarPlus,
+    10→  CheckCircle2,
+    11→  CircleCheck,
+    12→  FlaskConical,
+    13→  Inbox,
+    14→  Loader2,
+    15→  LogOut,
+    16→  Mail,
+    17→  MailWarning,
+    18→  RefreshCw,
+    19→  ShieldCheck,
+    20→  Zap,
+    21→} from "lucide-react";
+    22→import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+    23→import { Badge } from "@/components/ui/badge";
+    24→import { Button } from "@/components/ui/button";
+    25→import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+    26→import {
+    27→  Dialog,
+    28→  DialogContent,
+    29→  DialogDescription,
+    30→  DialogFooter,
+    31→  DialogHeader,
+    32→  DialogTitle,
+    33→} from "@/components/ui/dialog";
+    34→import { Input } from "@/components/ui/input";
+    35→import {
+    36→  Sheet,
+    37→  SheetContent,
+    38→  SheetDescription,
+    39→  SheetHeader,
+    40→  SheetTitle,
+    41→  SheetTrigger,
+    42→} from "@/components/ui/sheet";
+    43→import { Skeleton } from "@/components/ui/skeleton";
+    44→import { Logo } from "@/components/logo";
+    45→import { SiteFooter } from "@/components/site-footer";
+    46→import { findConflicts } from "@/lib/conflicts";
+    47→import { DEMO_EMAILS, DEMO_TASKS } from "@/lib/demo-data";
+    48→import { cn } from "@/lib/utils";
+    49→import {
+    50→  CATEGORY_STYLES,
+    51→  PRIORITY_STYLES,
+    52→  TASK_CATEGORIES,
+    53→  type GmailSyncResponse,
+    54→  type MoodleSyncResponse,
+    55→  type RawEmail,
+    56→  type SyncMeUser,
+    57→  type SyncTask,
+    58→  type TaskCategory,
+    59→} from "@/lib/types";
+    60→
+    61→const POLL_INTERVAL_MS = 30_000;
+    62→const MOODLE_URL_KEY = "syncme_moodle_ics_url";
+    63→/** Browser-side persistence: synced tasks survive reloads and later syncs — nothing fades away. */
+    64→const GMAIL_TASKS_KEY = "syncme_gmail_tasks_v1";
+    65→const MOODLE_TASKS_KEY = "syncme_moodle_tasks_v1";
+    66→const EMAILS_KEY = "syncme_emails_v1";
+    67→const DONE_KEY = "syncme_done_v1";
+    68→
+    69→/** Marks the user as handled — SyncMe skips these emails forever after. */
+    70→function loadJson<T>(key: string, fallback: T): T {
+    71→  if (typeof window === "undefined") return fallback;
+    72→  try {
+    73→    const raw = window.localStorage.getItem(key);
+    74→    return raw ? (JSON.parse(raw) as T) : fallback;
+    75→  } catch {
+    76→    return fallback;
+    77→  }
+    78→}
+    79→
+    80→function saveJson(key: string, value: unknown): void {
+    81→  try {
+    82→    window.localStorage.setItem(key, JSON.stringify(value));
+    83→  } catch {
+    84→    // Storage blocked or full — persistence is best effort, sync still works.
+    85→  }
+    86→}
+    87→
+    88→/**
+    89→ * Union merge: fresh tasks overwrite their previous version, tasks that were
+    90→ * extracted earlier are kept even if this sync missed them, and done tasks
+    91→ * never come back. Stale entries (due more than 14 days ago) are pruned.
+    92→ */
+    93→function mergeTasks(prev: SyncTask[], next: SyncTask[], done: Set<string>): SyncTask[] {
+    94→  const byId = new Map<string, SyncTask>();
+    95→  for (const t of prev) if (!done.has(t.id)) byId.set(t.id, t);
+    96→  for (const t of next) if (!done.has(t.id)) byId.set(t.id, t);
+    97→  const now = Date.now();
+    98→  return [...byId.values()]
+    99→    .filter((t) => {
+   100→      const due = Date.parse(t.dueDate);
+   101→      return Number.isNaN(due) || due > now - 14 * 86_400_000;
+   102→    })
+   103→    .slice(0, 80);
+   104→}
+   105→
+   106→function mergeEmails(prev: RawEmail[], next: RawEmail[]): RawEmail[] {
+   107→  const byId = new Map<string, RawEmail>();
+   108→  for (const e of prev) byId.set(e.id, e);
+   109→  for (const e of next) byId.set(e.id, e);
+   110→  return [...byId.values()].sort((a, b) => Date.parse(b.date) - Date.parse(a.date)).slice(0, 50);
+   111→}
+   112→
+   113→function formatDue(dueDate: string): string {
+   114→  if (dueDate === "unknown") return "No date detected";
+   115→  const d = new Date(dueDate);
+   116→  if (Number.isNaN(d.getTime())) return "No date detected";
+   117→  return format(d, "EEE, d MMM · HH:mm");
+   118→}
+   119→
+   120→function initialsOf(name: string): string {
+   121→  const parts = name.trim().split(/\s+/);
+   122→  const chars = parts.map((p) => p[0]?.toUpperCase() ?? "").join("");
+   123→  return chars.slice(0, 2) || "S";
+   124→}
+   125→
+   126→function TaskCard({
+   127→  task,
+   128→  index,
+   129→  onDone,
+   130→}: {
+   131→  task: SyncTask;
+   132→  index: number;
+   133→  onDone: (task: SyncTask) => void;
+   134→}) {
+   135→  const cat = CATEGORY_STYLES[task.category];
+   136→  return (
+   137→    <motion.article
+   138→      initial={{ opacity: 0, y: 10 }}
+   139→      animate={{ opacity: 1, y: 0 }}
+   140→      transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1], delay: Math.min(index * 0.04, 0.32) }}
+   141→      className="h-full"
+   142→    >
+   143→      <Card className="flex h-full flex-col border-border/80 bg-card transition-colors duration-300 ease-base hover:border-primary/40">
+   144→        <CardContent className="flex h-full flex-col gap-2 p-4">
+   145→          <div className="flex flex-wrap items-center gap-2">
+   146→            <span
+   147→              className={cn(
+   148→                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium",
+   149→                cat.badge,
+   150→              )}
+   151→            >
+   152→              <span className={cn("h-1.5 w-1.5 rounded-full", cat.dot)} />
+   153→              {task.category}
+   154→            </span>
+   155→            <span
+   156→              className={cn(
+   157→                "inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold",
+   158→                PRIORITY_STYLES[task.priority],
+   159→              )}
+   160→            >
+   161→              {task.priority}
+   162→            </span>
+   163→            <button
+   164→              type="button"
+   165→              onClick={() => onDone(task)}
+   166→              aria-label={`Mark "${task.title}" as done`}
+   167→              title="Mark as done — SyncMe will skip this email from now on"
+   168→              className="ml-auto inline-flex min-h-11 items-center gap-1.5 rounded-full border border-border bg-background/60 px-3 py-1 text-xs font-medium text-muted-foreground transition-colors duration-300 ease-base hover:border-emerald-400/40 hover:text-emerald-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring active:scale-[0.98]"
+   169→            >
+   170→              <CircleCheck className="h-3.5 w-3.5" />
+   171→              Done
+   172→            </button>
+   173→          </div>
+   174→          <h3 className="text-sm font-semibold leading-snug text-foreground">{task.title}</h3>
+   175→          <p suppressHydrationWarning className="flex items-center gap-1.5 text-xs text-muted-foreground">
+   176→            <CalendarClock className="h-3.5 w-3.5 shrink-0 text-primary" />
+   177→            {formatDue(task.dueDate)}
+   178→          </p>
+   179→          <p className="text-xs leading-relaxed text-muted-foreground">{task.actionSummary}</p>
+   180→          <p className="mt-auto flex items-center gap-1.5 pt-1 text-xs text-muted-foreground/70">
+   181→            <Mail className="h-3 w-3 shrink-0" />
+   182→            <span className="w-0 flex-1 truncate">{task.sourceEmailSubject}</span>
+   183→          </p>
+   184→        </CardContent>
+   185→      </Card>
+   186→    </motion.article>
+   187→  );
+   188→}
+   189→
+   190→export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: boolean }) {
+   191→  const [gmailTasks, setGmailTasks] = useState<SyncTask[]>(isDemo ? DEMO_TASKS : []);
+   192→  const [moodleTasks, setMoodleTasks] = useState<SyncTask[]>([]);
+   193→  const [emails, setEmails] = useState<RawEmail[]>(isDemo ? DEMO_EMAILS : []);
+   194→  const [syncing, setSyncing] = useState(!isDemo);
+   195→  const [lastSync, setLastSync] = useState<Date | null>(null);
+   196→  const [connected, setConnected] = useState(true);
+   197→  const [aiStatus, setAiStatus] = useState<"ai" | "heuristic" | null>(null);
+   198→  const [engine, setEngine] = useState<"gemini" | "zai" | "rule" | null>(null);
+   199→  const [doneIds, setDoneIds] = useState<Set<string>>(new Set());
+   200→  const [moodleConnected, setMoodleConnected] = useState(false);
+   201→  const [filter, setFilter] = useState<"All" | TaskCategory>("All");
+   202→  const [moodleOpen, setMoodleOpen] = useState(false);
+   203→  const [moodleUrl, setMoodleUrl] = useState("");
+   204→  const [moodleConnecting, setMoodleConnecting] = useState(false);
+   205→
+   206→  /** Ref mirror of doneIds so the 30s polling merge never resurrects done tasks. */
+   207→  const doneRef = useRef<Set<string>>(new Set());
+   208→
+   209→  // ── Restore the persisted session state before the first sync fires ───────
+   210→  useEffect(() => {
+   211→    if (isDemo) return;
+   212→    const savedTasks = loadJson<SyncTask[]>(GMAIL_TASKS_KEY, []);
+   213→    const savedMoodle = loadJson<SyncTask[]>(MOODLE_TASKS_KEY, []);
+   214→    const savedEmails = loadJson<RawEmail[]>(EMAILS_KEY, []);
+   215→    const savedDone = loadJson<string[]>(DONE_KEY, []);
+   216→    doneRef.current = new Set(savedDone);
+   217→    setDoneIds(new Set(savedDone));
+   218→    setGmailTasks((prev) => (prev.length === 0 ? savedTasks : prev));
+   219→    setMoodleTasks((prev) => (prev.length === 0 ? savedMoodle : prev));
+   220→    setEmails((prev) => (prev.length === 0 ? savedEmails : prev));
+   221→    if (savedMoodle.length > 0) setMoodleConnected(true);
+   222→  }, [isDemo]);
+   223→
+   224→  // ── Persist on every change (best effort, browser only — zero servers) ────
+   225→  useEffect(() => {
+   226→    if (!isDemo) saveJson(GMAIL_TASKS_KEY, gmailTasks);
+   227→  }, [gmailTasks, isDemo]);
+   228→  useEffect(() => {
+   229→    if (!isDemo) saveJson(MOODLE_TASKS_KEY, moodleTasks);
+   230→  }, [moodleTasks, isDemo]);
+   231→  useEffect(() => {
+   232→    if (!isDemo) saveJson(EMAILS_KEY, emails);
+   233→  }, [emails, isDemo]);
+   234→  useEffect(() => {
+   235→    if (!isDemo) saveJson(DONE_KEY, [...doneIds]);
+   236→  }, [doneIds, isDemo]);
+   237→
+   238→  // ── Gmail sync (also runs on load and polls every 30s) ────────────────────
+   239→  const syncNow = useCallback(
+   240→    async (silent = false) => {
+   241→      if (isDemo) {
+   242→        if (!silent) {
+   243→          toast.info("Demo sandbox", {
+   244→            description: "Simulated sync — connect real Gmail from the landing page to run the live pipeline.",
+   245→          });
+   246→        }
+   247→        setLastSync(new Date());
+   248→        return;
+   249→      }
+   250→      setSyncing(true);
+   251→      try {
+   252→        const res = await fetch("/api/gmail/sync", { cache: "no-store" });
+   253→        const data = (await res.json()) as GmailSyncResponse;
+   254→        if (res.status === 401 || !data.ok) {
+   255→          if (res.status === 401) {
+   256→            setConnected(false);
+   257→            if (!silent) {
+   258→              toast.error("Gmail not connected", {
+   259→                description: "Your session expired or is missing. Reconnect below — no consent screen needed.",
+   260→              });
+   261→            }
+   262→          } else if (!silent) {
+   263→            toast.error("Sync failed", { description: data.error ?? `HTTP ${res.status}` });
+   264→          }
+   265→          return;
+   266→        }
+   267→        // Merge instead of replace: previously synced tasks never fade away.
+   268→        setGmailTasks((prev) => mergeTasks(prev, data.tasks, doneRef.current));
+   269→        setEmails((prev) => mergeEmails(prev, data.emails));
+   270→        setAiStatus(data.aiStatus);
+   271→        setEngine(data.engine ?? null);
+   272→        setConnected(true);
+   273→        setLastSync(new Date());
+   274→        if (!silent) {
+   275→          toast.success(
+   276→            `${data.tasks.length} task${data.tasks.length === 1 ? "" : "s"} extracted`,
+   277→            {
+   278→              description:
+   279→                data.aiStatus === "heuristic"
+   280→                  ? "AI was unavailable — used the rule-based extractor."
+   281→                  : `${data.engine === "gemini" ? "Gemini" : "GLM"} scanned ${data.emails.length} university email${data.emails.length === 1 ? "" : "s"} (last 30 days).`,
+   282→            },
+   283→          );
+   284→        }
+   285→      } catch (err) {
+   286→        if (!silent) toast.error("Sync failed", { description: String(err) });
+   287→      } finally {
+   288→        setSyncing(false);
+   289→      }
+   290→    },
+   291→    [isDemo],
+   292→  );
+   293→
+   294→  useEffect(() => {
+   295→    if (isDemo) return;
+   296→    void syncNow(true);
+   297→    const timer = setInterval(() => void syncNow(true), POLL_INTERVAL_MS);
+   298→    return () => clearInterval(timer);
+   299→  }, [isDemo, syncNow]);
+   300→
+   301→  // ── Moodle .ics connect ────────────────────────────────────────────────────
+   302→  const connectMoodle = useCallback(
+   303→    async (url: string, silent = false) => {
+   304→      if (!/^https?:\/\/.+/i.test(url)) {
+   305→        if (!silent) toast.error("Invalid calendar URL", { description: "Paste a full http(s) .ics export URL." });
+   306→        return;
+   307→      }
+   308→      setMoodleConnecting(true);
+   309→      try {
+   310→        const res = await fetch("/api/moodle/sync", {
+   311→          method: "POST",
+   312→          headers: { "Content-Type": "application/json" },
+   313→          body: JSON.stringify({ icsUrl: url }),
+   314→        });
+   315→        const data = (await res.json()) as MoodleSyncResponse;
+   316→        if (!res.ok || !data.ok) {
+   317→          if (!silent) toast.error("Moodle sync failed", { description: data.error ?? `HTTP ${res.status}` });
+   318→          return;
+   319→        }
+   320→        setMoodleTasks((prev) => mergeTasks(prev, data.tasks, doneRef.current));
+   321→        setMoodleConnected(true);
+   322→        window.localStorage.setItem(MOODLE_URL_KEY, url);
+   323→        if (!silent) {
+   324→          toast.success(`${data.tasks.length} Moodle event${data.tasks.length === 1 ? "" : "s"} imported`, {
+   325→            description: "Deadlines from your e-learning calendar now appear alongside Gmail tasks.",
+   326→          });
+   327→          setMoodleOpen(false);
+   328→        }
+   329→      } catch (err) {
+   330→        if (!silent) toast.error("Moodle sync failed", { description: String(err) });
+   331→      } finally {
+   332→        setMoodleConnecting(false);
+   333→      }
+   334→    },
+   335→    [],
+   336→  );
+   337→
+   338→  useEffect(() => {
+   339→    if (isDemo) return;
+   340→    const saved = window.localStorage.getItem(MOODLE_URL_KEY);
+   341→    if (saved) {
+   342→      setMoodleUrl(saved);
+   343→      void connectMoodle(saved, true);
+   344→    }
+   345→  }, [isDemo, connectMoodle]);
+   346→
+   347→  /** Mark as done: hidden now, skipped by every future sync, remembered forever. */
+   348→  const markTaskDone = useCallback((task: SyncTask) => {
+   349→    const next = new Set(doneRef.current);
+   350→    next.add(task.id);
+   351→    doneRef.current = next;
+   352→    setDoneIds(next);
+   353→    setGmailTasks((prev) => prev.filter((t) => t.id !== task.id));
+   354→    setMoodleTasks((prev) => prev.filter((t) => t.id !== task.id));
+   355→    toast.success("Marked as done", {
+   356→      description: `SyncMe will skip "${task.title}" from now on.`,
+   357→    });
+   358→  }, []);
+   359→
+   360→  const logout = useCallback(async () => {
+   361→    try {
+   362→      await fetch("/api/auth/logout", { method: "POST" });
+   363→    } finally {
+   364→      window.location.href = "/";
+   365→    }
+   366→  }, []);
+   367→
+   368→  // ── Derived data ───────────────────────────────────────────────────────────
+   369→  const allTasks = useMemo(() => {
+   370→    const merged = [...gmailTasks, ...moodleTasks];
+   371→    return [...merged].sort((a, b) => {
+   372→      const ta = Date.parse(a.dueDate);
+   373→      const tb = Date.parse(b.dueDate);
+   374→      const va = Number.isNaN(ta) ? Number.POSITIVE_INFINITY : ta;
+   375→      const vb = Number.isNaN(tb) ? Number.POSITIVE_INFINITY : tb;
+   376→      return va - vb;
+   377→    });
+   378→  }, [gmailTasks, moodleTasks]);
+   379→
+   380→  const filteredTasks = useMemo(
+   381→    () => (filter === "All" ? allTasks : allTasks.filter((t) => t.category === filter)),
+   382→    [allTasks, filter],
+   383→  );
+   384→
+   385→  const conflicts = useMemo(() => findConflicts(allTasks), [allTasks]);
+   386→
+   387→  const categoryCounts = useMemo(() => {
+   388→    const counts = new Map<"All" | TaskCategory, number>([["All", allTasks.length]]);
+   389→    for (const c of TASK_CATEGORIES) counts.set(c, allTasks.filter((t) => t.category === c).length);
+   390→    return counts;
+   391→  }, [allTasks]);
+   392→
+   393→  const showSkeletons = syncing && allTasks.length === 0;
+   394→
+   395→  return (
+   396→    <div className="flex min-h-screen flex-col bg-background text-foreground">
+   397→      {/* ── Header ─────────────────────────────────────────────────────────── */}
+   398→      <header className="sticky top-0 z-40 border-b border-border/60 bg-background/90 backdrop-blur">
+   399→        <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
+   400→          <Logo />
+   401→          <div className="flex items-center gap-2 sm:gap-3">
+   402→            {isDemo && (
+   403→              <Badge variant="outline" className="gap-1.5 border-primary/40 bg-primary/10 text-primary">
+   404→                <FlaskConical className="h-3 w-3" />
+   405→                Demo
+   406→              </Badge>
+   407→            )}
+   408→            <div className="flex items-center gap-2">
+   409→              <Avatar className="h-8 w-8">
+   410→                {user.picture ? <AvatarImage src={user.picture} alt={`${user.name}'s profile photo`} /> : null}
+   411→                <AvatarFallback className="bg-secondary text-xs font-semibold">
+   412→                  {initialsOf(user.name)}
+   413→                </AvatarFallback>
+   414→              </Avatar>
+   415→              <div className="hidden min-w-0 sm:block">
+   416→                <p className="truncate text-xs font-semibold leading-tight text-foreground">{user.name}</p>
+   417→                <p className="truncate text-xs leading-tight text-muted-foreground">{user.email}</p>
+   418→              </div>
+   419→            </div>
+   420→            <Button variant="outline" size="sm" onClick={() => void logout()} className="gap-1.5">
+   421→              <LogOut className="h-3.5 w-3.5" />
+   422→              <span className="hidden sm:inline">Logout</span>
+   423→            </Button>
+   424→          </div>
+   425→        </div>
+   426→      </header>
+   427→
+   428→      <main id="main" className="mx-auto w-full max-w-6xl flex-1 px-4 pb-14 pt-6 sm:px-6">
+   429→        {/* ── Demo banner ──────────────────────────────────────────────────── */}
+   430→        {isDemo && (
+   431→          <div className="mb-5 flex flex-wrap items-center gap-2 rounded-xl border border-primary/30 bg-primary/[0.07] px-4 py-3 text-sm">
+   432→            <FlaskConical className="h-4 w-4 shrink-0 text-primary" />
+   433→            <p className="text-muted-foreground">
+   434→              <strong className="font-semibold text-primary">Demo Sandbox</strong> — simulated Debrecen
+   435→              inbox. No Gmail account is connected;{" "}
+   436→              <a href="/api/auth/google" className="text-primary underline underline-offset-4">
+   437→                connect real Gmail
+   438→              </a>{" "}
+   439→              to run the live pipeline.
+   440→            </p>
+   441→          </div>
+   442→        )}
+   443→
+   444→        {/* ── Toolbar ──────────────────────────────────────────────────────── */}
+   445→        <div className="flex flex-wrap items-center gap-3">
+   446→          <Button
+   447→            onClick={() => void syncNow()}
+   448→            disabled={syncing || (!isDemo && !connected)}
+   449→            className="gap-2 font-semibold"
+   450→          >
+   451→            {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+   452→            Sync Gmail Now
+   453→          </Button>
+   454→          <span className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground">
+   455→            <span
+   456→              suppressHydrationWarning
+   457→              className={cn(
+   458→                "h-2 w-2 rounded-full",
+   459→                isDemo ? "bg-primary live-dot" : connected ? "bg-emerald-400 live-dot" : "bg-zinc-500",
+   460→              )}
+   461→            />
+   462→            {isDemo ? "Demo mode" : connected ? "Gmail connected" : "Gmail disconnected"}
+   463→            {lastSync && (
+   464→              <span suppressHydrationWarning className="text-muted-foreground/60">
+   465→                · synced {format(lastSync, "HH:mm:ss")}
+   466→              </span>
+   467→            )}
+   468→          </span>
+   469→
+   470→          <div className="ml-auto flex flex-wrap items-center gap-2">
+   471→            <Sheet>
+   472→              <SheetTrigger asChild>
+   473→                <Button variant="outline" size="sm" className="gap-1.5">
+   474→                  <MailWarning className="h-3.5 w-3.5" />
+   475→                  Raw emails ({emails.length})
+   476→                </Button>
+   477→              </SheetTrigger>
+   478→              <SheetContent side="right" className="w-full border-border bg-card sm:max-w-md">
+   479→                <SheetHeader>
+   480→                  <SheetTitle>Raw emails</SheetTitle>
+   481→                  <SheetDescription>
+   482→                    Last 30 days, academic, educational, immigration, health and professional mail only.
+   483→                    Emails you already answered are skipped. Fetched live, never stored on servers.
+   484→                  </SheetDescription>
+   485→                </SheetHeader>
+   486→                <div className="scrollbar-slim max-h-[calc(100vh-10rem)] space-y-3 overflow-y-auto px-4 pb-6">
+   487→                  {emails.length === 0 && (
+   488→                    <p className="py-8 text-center text-xs text-muted-foreground">
+   489→                      No emails scanned yet — run a Gmail sync first.
+   490→                    </p>
+   491→                  )}
+   492→                  {emails.map((e) => (
+   493→                    <div key={e.id} className="rounded-xl border border-border/70 bg-background/60 p-3">
+   494→                      <p className="text-xs font-semibold leading-snug text-foreground">{e.subject}</p>
+   495→                      <p className="mt-1 truncate text-xs text-muted-foreground">{e.from}</p>
+   496→                      <p suppressHydrationWarning className="text-xs text-muted-foreground/70">
+   497→                        {formatDue(e.date)}
+   498→                      </p>
+   499→                      <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-muted-foreground">
+   500→                        {e.snippet}
+   501→                      </p>
+   502→                    </div>
+   503→                  ))}
+   504→                </div>
+   505→              </SheetContent>
+   506→            </Sheet>
+   507→
+   508→            <Dialog open={moodleOpen} onOpenChange={setMoodleOpen}>
+   509→              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setMoodleOpen(true)}>
+   510→                {moodleConnected ? (
+   511→                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+   512→                ) : (
+   513→                  <CalendarPlus className="h-3.5 w-3.5" />
+   514→                )}
+   515→                {moodleConnected ? "Moodle connected" : "Connect Moodle .ics"}
+   516→              </Button>
+   517→              <DialogContent className="border-border bg-card sm:max-w-md">
+   518→                <DialogHeader>
+   519→                  <DialogTitle>Connect Moodle calendar</DialogTitle>
+   520→                  <DialogDescription>
+   521→                    On elearning.unideb.hu go to Calendar → Export → Private address (.ics) and paste the
+   522→                    URL here. It is stored only in this browser.
+   523→                  </DialogDescription>
+   524→                </DialogHeader>
+   525→                <Input
+   526→                  value={moodleUrl}
+   527→                  onChange={(e) => setMoodleUrl(e.target.value)}
+   528→                  placeholder="https://elearning.unideb.hu/calendar/export.php?..."
+   529→                  className="border-input bg-background text-sm"
+   530→                  aria-label="Moodle .ics calendar URL"
+   531→                />
+   532→                <DialogFooter>
+   533→                  <Button
+   534→                    onClick={() => void connectMoodle(moodleUrl)}
+   535→                    disabled={moodleConnecting || !moodleUrl.trim()}
+   536→                    className="gap-2 font-semibold"
+   537→                  >
+   538→                    {moodleConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+   539→                    Connect
+   540→                  </Button>
+   541→                </DialogFooter>
+   542→              </DialogContent>
+   543→            </Dialog>
+   544→          </div>
+   545→        </div>
+   546→
+   547→        {/* ── Conflict radar ───────────────────────────────────────────────── */}
+   548→        {conflicts.length > 0 && (
+   549→          <div className="mt-5 space-y-2" role="alert" aria-label="Deadline conflicts">
+   550→            {conflicts.map((c) => (
+   551→              <div
+   552→                key={c.dateKey}
+   553→                className="flex items-start gap-3 rounded-xl border border-primary/30 bg-primary/[0.07] px-4 py-3"
+   554→              >
+   555→                <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-primary live-dot" />
+   556→                <div className="text-sm leading-relaxed">
+   557→                  <span className="font-semibold text-primary">
+   558→                    {c.tasks.length} deadlines collide on {c.dateLabel}.
+   559→                  </span>{" "}
+   560→                  <span className="text-muted-foreground">{c.tasks.map((t) => t.title).join(" · ")}</span>
+   561→                </div>
+   562→              </div>
+   563→            ))}
+   564→          </div>
+   565→        )}
+   566→
+   567→        {/* ── Category filter chips ────────────────────────────────────────── */}
+   568→        <div className="mt-5 flex flex-wrap gap-2" role="group" aria-label="Filter tasks by category">
+   569→          {(["All", ...TASK_CATEGORIES] as const).map((c) => (
+   570→            <button
+   571→              key={c}
+   572→              type="button"
+   573→              onClick={() => setFilter(c)}
+   574→              aria-pressed={filter === c}
+   575→              className={cn(
+   576→                "min-h-11 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors duration-300 ease-base",
+   577→                filter === c
+   578→                  ? "border-primary bg-primary text-primary-foreground"
+   579→                  : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground",
+   580→              )}
+   581→            >
+   582→              {c}
+   583→              <span className={cn("ml-1.5", filter === c ? "text-primary-foreground/70" : "text-muted-foreground/60")}>
+   584→                {categoryCounts.get(c) ?? 0}
+   585→              </span>
+   586→            </button>
+   587→          ))}
+   588→        </div>
+   589→
+   590→        {/* ── Tasks + sidebar ──────────────────────────────────────────────── */}
+   591→        <div className="mt-5 grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
+   592→          <section aria-label="Extracted tasks">
+   593→            {showSkeletons ? (
+   594→              <div className="grid gap-4 md:grid-cols-2">
+   595→                {Array.from({ length: 6 }).map((_, i) => (
+   596→                  <Skeleton key={i} className="h-44 rounded-2xl bg-card" />
+   597→                ))}
+   598→              </div>
+   599→            ) : filteredTasks.length === 0 ? (
+   600→              <Card className="border-dashed border-border">
+   601→                <CardContent className="flex flex-col items-center gap-3 py-14 text-center">
+   602→                  <Inbox className="h-8 w-8 text-muted-foreground/60" />
+   603→                  <p className="text-sm font-semibold text-foreground">
+   604→                    {connected || isDemo ? "No deadlines detected yet" : "Gmail not connected"}
+   605→                  </p>
+   606→                  <p className="max-w-sm text-xs leading-relaxed text-muted-foreground">
+   607→                    {connected || isDemo
+   608→                      ? "Hit “Sync Gmail Now” — SyncMe scans your last 30 days of university email and pulls out exams, quizzes, appointments and immigration letters. Tasks stay on this dashboard between syncs."
+   609→                      : "Reconnect your Google account to start scanning your inbox for deadlines again. No consent screen needed."}
+   610→                  </p>
+   611→                  {!connected && !isDemo && (
+   612→                    <Button asChild className="mt-1 gap-2 font-semibold">
+   613→                      <a href="/api/auth/google">Reconnect Gmail</a>
+   614→                    </Button>
+   615→                  )}
+   616→                </CardContent>
+   617→              </Card>
+   618→            ) : (
+   619→              <div className="grid gap-4 md:grid-cols-2">
+   620→                {filteredTasks.map((t, i) => (
+   621→                  <TaskCard key={t.id} task={t} index={i} onDone={markTaskDone} />
+   622→                ))}
+   623→              </div>
+   624→            )}
+   625→          </section>
+   626→
+   627→          <aside className="space-y-4" aria-label="Sync status">
+   628→            <Card className="border-border/80 bg-card">
+   629→              <CardHeader className="pb-3">
+   630→                <CardTitle className="text-sm">Sync status</CardTitle>
+   631→                <CardDescription className="text-xs">Auto-refreshes every 30 seconds.</CardDescription>
+   632→              </CardHeader>
+   633→              <CardContent className="space-y-2.5 text-xs">
+   634→                <div className="flex items-center justify-between">
+   635→                  <span className="text-muted-foreground">Gmail</span>
+   636→                  <span
+   637→                    className={cn(
+   638→                      "inline-flex items-center gap-1.5 font-medium",
+   639→                      connected || isDemo ? "text-emerald-300" : "text-rose-300",
+   640→                    )}
+   641→                  >
+   642→                    {(connected || isDemo) && <CheckCircle2 className="h-3.5 w-3.5" />}
+   643→                    {isDemo ? "Simulated" : connected ? "Connected" : "Disconnected"}
+   644→                  </span>
+   645→                </div>
+   646→                {!isDemo && (
+   647→                  <p className="truncate text-xs text-muted-foreground/70" title={user.email}>
+   648→                    {user.email}
+   649→                  </p>
+   650→                )}
+   651→                {!isDemo && !connected && (
+   652→                  <Button asChild size="sm" className="w-full gap-1.5 font-semibold">
+   653→                    <a href="/api/auth/google">Reconnect Gmail</a>
+   654→                  </Button>
+   655→                )}
+   656→                <div className="flex items-center justify-between">
+   657→                  <span className="text-muted-foreground">Moodle</span>
+   658→                  <span
+   659→                    className={cn(
+   660→                      "inline-flex items-center gap-1.5 font-medium",
+   661→                      moodleConnected ? "text-emerald-300" : "text-muted-foreground",
+   662→                    )}
+   663→                  >
+   664→                    {moodleConnected && <CheckCircle2 className="h-3.5 w-3.5" />}
+   665→                    {moodleConnected ? `Connected · ${moodleTasks.length} events` : "Not connected"}
+   666→                  </span>
+   667→                </div>
+   668→                <div className="flex items-center justify-between">
+   669→                  <span className="text-muted-foreground">Extractor</span>
+   670→                  <span className="font-medium text-foreground">
+   671→                    {isDemo
+   672→                      ? "Demo data"
+   673→                      : engine === "gemini"
+   674→                        ? "Gemini"
+   675→                        : engine === "zai"
+   676→                          ? "GLM"
+   677→                          : engine === "rule"
+   678→                            ? "Rule engine"
+   679→                            : "—"}
+   680→                  </span>
+   681→                </div>
+   682→                <div className="flex items-center justify-between">
+   683→                  <span className="text-muted-foreground">Last sync</span>
+   684→                  <span suppressHydrationWarning className="font-medium text-foreground">
+   685→                    {lastSync ? format(lastSync, "HH:mm:ss") : "—"}
+   686→                  </span>
+   687→                </div>
+   688→              </CardContent>
+   689→            </Card>
+   690→
+   691→            <Card className="border-border/80 bg-card">
+   692→              <CardHeader className="pb-3">
+   693→                <CardTitle className="text-sm">Moodle feed</CardTitle>
+   694→              </CardHeader>
+   695→              <CardContent className="space-y-2 text-xs">
+   696→                <p className="break-all text-muted-foreground">
+   697→                  {moodleConnected
+   698→                    ? "Connected via your private .ics URL (stored in this browser only)."
+   699→                    : "Paste your elearning.unideb.hu private .ics export URL to pull quiz and assignment deadlines."}
+   700→                </p>
+   701→                <Button variant="outline" size="sm" className="w-full gap-1.5" onClick={() => setMoodleOpen(true)}>
+   702→                  <CalendarPlus className="h-3.5 w-3.5" />
+   703→                  {moodleConnected ? "Update feed URL" : "Connect .ics feed"}
+   704→                </Button>
+   705→              </CardContent>
+   706→            </Card>
+   707→
+   708→            <Card className="border-border/80 bg-card">
+   709→              <CardHeader className="pb-3">
+   710→                <CardTitle className="flex items-center gap-2 text-sm">
+   711→                  <ShieldCheck className="h-4 w-4 text-primary" />
+   712→                  Read-only &amp; zero storage
+   713→                </CardTitle>
+   714→              </CardHeader>
+   715→              <CardContent className="text-xs leading-relaxed text-muted-foreground">
+   716→                SyncMe uses <code className="text-foreground">gmail.readonly</code> solely to extract student
+   717→                deadlines. Emails are fetched on demand and never stored or sold.{" "}
+   718→                <a href="/privacy" className="text-primary underline underline-offset-4">
+   719→                  Privacy Policy
+   720→                </a>
+   721→              </CardContent>
+   722→            </Card>
+   723→          </aside>
+   724→        </div>
+   725→      </main>
+   726→
+   727→      <SiteFooter />
+   728→    </div>
+   729→  );
+   730→}
+   731→
