@@ -45,23 +45,23 @@
 }
 
 /* ─── SyncMe — dark editorial palette ───────────────────────────────────────
-   Deep Charcoal #18191C · Card Slate #232529 · Crisp Silver #E4E5E7
+   Deep Charcoal #181818 · Card Slate #1f1f1f · Crisp Silver #E4E5E7
    Signal Yellow #FFC93C                                                     */
 :root {
   --radius: 0.625rem;
-  --background: #18191c;
+  --background: #181818;
   --foreground: #e4e5e7;
-  --card: #232529;
+  --card: #1f1f1f;
   --card-foreground: #e4e5e7;
-  --popover: #26282c;
+  --popover: #272727;
   --popover-foreground: #e4e5e7;
   --primary: #ffc93c;
-  --primary-foreground: #18191c;
-  --secondary: #2e3035;
+  --primary-foreground: #181818;
+  --secondary: #313131;
   --secondary-foreground: #e4e5e7;
-  --muted: #26282c;
+  --muted: #272727;
   --muted-foreground: #9a9ca1;
-  --accent: #2e3035;
+  --accent: #313131;
   --accent-foreground: #ffc93c;
   --destructive: #e5484d;
   --destructive-foreground: #ffffff;
@@ -73,30 +73,30 @@
   --chart-3: #34d27b;
   --chart-4: #e4e5e7;
   --chart-5: #9a9ca1;
-  --sidebar: #232529;
+  --sidebar: #1f1f1f;
   --sidebar-foreground: #e4e5e7;
   --sidebar-primary: #ffc93c;
-  --sidebar-primary-foreground: #18191c;
-  --sidebar-accent: #2e3035;
+  --sidebar-primary-foreground: #181818;
+  --sidebar-accent: #313131;
   --sidebar-accent-foreground: #e4e5e7;
   --sidebar-border: #34363b;
   --sidebar-ring: #ffc93c;
 }
 
 .dark {
-  --background: #18191c;
+  --background: #181818;
   --foreground: #e4e5e7;
-  --card: #232529;
+  --card: #1f1f1f;
   --card-foreground: #e4e5e7;
-  --popover: #26282c;
+  --popover: #272727;
   --popover-foreground: #e4e5e7;
   --primary: #ffc93c;
-  --primary-foreground: #18191c;
-  --secondary: #2e3035;
+  --primary-foreground: #181818;
+  --secondary: #313131;
   --secondary-foreground: #e4e5e7;
-  --muted: #26282c;
+  --muted: #272727;
   --muted-foreground: #9a9ca1;
-  --accent: #2e3035;
+  --accent: #313131;
   --accent-foreground: #ffc93c;
   --destructive: #e5484d;
   --destructive-foreground: #ffffff;
@@ -108,11 +108,11 @@
   --chart-3: #34d27b;
   --chart-4: #e4e5e7;
   --chart-5: #9a9ca1;
-  --sidebar: #232529;
+  --sidebar: #1f1f1f;
   --sidebar-foreground: #e4e5e7;
   --sidebar-primary: #ffc93c;
-  --sidebar-primary-foreground: #18191c;
-  --sidebar-accent: #2e3035;
+  --sidebar-primary-foreground: #181818;
+  --sidebar-accent: #313131;
   --sidebar-accent-foreground: #e4e5e7;
   --sidebar-border: #34363b;
   --sidebar-ring: #ffc93c;
@@ -161,5 +161,26 @@
   }
 }
 .live-dot {
-  animation: syncme-live 1.8s ease-in-out infinite;
+  animation: syncme-live 1.8s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+/* ─── Design-skill motion utilities ──────────────────────────────────────────
+   Base curve: weighted deceleration, never a browser default ease.          */
+@utility ease-base {
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ─── Tagline reveal (B11): words rest at ~30%, activate one by one ───────── */
+.word-reveal {
+  opacity: 0.3;
+  transition: opacity 500ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.word-reveal[data-active="true"] {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .word-reveal {
+    opacity: 1;
+    transition: none;
+  }
 }

@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { buildGoogleAuthUrl, googleOAuthConfigured, resolveOrigin } from "@/lib/gmail";
+import { buildGoogleAuthUrl, googleOAuthConfigured, resolveOrigin, sessionCookieOptions } from "@/lib/gmail";
 
 export const dynamic = "force-dynamic";
 
@@ -7,6 +7,11 @@ export const dynamic = "force-dynamic";
  * GET /api/auth/google — starts the Google OAuth 2.0 consent flow with
  * openid email profile + gmail.readonly (access_type=offline so a refresh
  * token is issued), redirecting back to ${origin}/api/auth/callback.
+ *
+ * `?mode=silent` runs the invisible reconnect: prompt=none asks Google to
+ * re-issue tokens WITHOUT any consent screen (only possible because the
+ * student already consented and Google's own session cookie persists).
+ * A short-lived `syncme_reauth` marker cookie guards the redirect loop.
  *
  * The whole handler is wrapped in try/catch: this route can never surface an
  * unhandled 500 to Vercel — every failure is a clean redirect back to the
@@ -20,6 +25,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL("/?error=oauth_failed&detail=origin", req.url));
   }
 
+  const silent = req.nextUrl.searchParams.get("mode") === "silent";
+
   try {
     if (!googleOAuthConfigured()) {
       return NextResponse.redirect(`${origin}/?auth_error=not_configured`);
@@ -27,7 +34,13 @@ export async function GET(req: NextRequest) {
     // Byte-identical redirect_uri computation with /api/auth/callback — both
     // routes call resolveOrigin() and append the same path.
     const redirectUri = `${origin}/api/auth/callback`;
-    return NextResponse.redirect(buildGoogleAuthUrl(redirectUri));
+    const res = NextResponse.redirect(buildGoogleAuthUrl(redirectUri, silent ? "none" : "consent"));
+    if (silent) {
+      // Loop guard: the dashboard only auto-redirects here when this marker
+      // is absent; the callback clears it on success.
+      res.cookies.set("syncme_reauth", "1", sessionCookieOptions(120));
+    }
+    return res;
   } catch (err) {
     console.error("[SyncMe OAuth] authorize redirect failed:", err);
     const detail = err instanceof Error ? err.message.slice(0, 120) : "authorize_failed";

@@ -14,9 +14,15 @@ export function SiteFooter() {
           <span>Built for University of Debrecen students</span>
           <Link
             href="/privacy"
-            className="underline-offset-4 transition-colors hover:text-foreground hover:underline"
+            className="underline-offset-4 transition-colors duration-300 ease-base hover:text-foreground hover:underline"
           >
             Privacy Policy
+          </Link>
+          <Link
+            href="/terms"
+            className="underline-offset-4 transition-colors duration-300 ease-base hover:text-foreground hover:underline"
+          >
+            Terms
           </Link>
         </div>
       </div>

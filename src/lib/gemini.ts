@@ -12,8 +12,8 @@
 import type { RawEmail, SyncTask } from "@/lib/types";
 import { sanitizeTask } from "@/lib/types";
 
-const GEMINI_ENDPOINT =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+const GEMINI_ENDPOINT_MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_ENDPOINT_MODEL}:generateContent`;
 const GEMINI_TIMEOUT_MS = 30_000;
 /** Placeholder written into .env.example / .env.local before the real key exists. */
 const KEY_PLACEHOLDER = "PASTE_YOUR_GEMINI_KEY_HERE";
@@ -91,7 +91,7 @@ export async function extractTasksGemini(
       signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
     });
     if (!res.ok) {
-      console.error(`[SyncMe Gemini] gemini-2.5-flash → HTTP ${res.status}`);
+      console.error(`[SyncMe Gemini] ${GEMINI_ENDPOINT_MODEL} → HTTP ${res.status}`);
       return null;
     }
     const data = (await res.json()) as {
@@ -108,7 +108,7 @@ export async function extractTasksGemini(
       .filter((t): t is SyncTask => t !== null);
   } catch (err) {
     console.error(
-      "[SyncMe Gemini] gemini-2.5-flash failed:",
+      `[SyncMe Gemini] ${GEMINI_ENDPOINT_MODEL} failed:`,
       err instanceof Error ? err.message : err,
     );
     return null;

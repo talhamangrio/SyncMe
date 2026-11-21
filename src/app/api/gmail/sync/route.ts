@@ -13,25 +13,26 @@ import type { RawEmail, SyncTask } from "@/lib/types";
 export const dynamic = "force-dynamic";
 
 /**
- * Gemini (gemini-2.5-flash) is the PRIMARY classifier/extractor. When
+ * Gemini (gemini-3.8-flash) is the PRIMARY classifier/extractor. When
  * GEMINI_API_KEY is missing or the call fails, extractTasksGemini returns
  * null and we silently fall back to the existing Z.ai GLM pipeline
  * (glm-4.5-flash → bundled SDK → deterministic rule engine).
  */
 async function extractWithFallback(
   emails: RawEmail[],
-): Promise<{ tasks: SyncTask[]; aiStatus: "ai" | "heuristic" }> {
+): Promise<{ tasks: SyncTask[]; aiStatus: "ai" | "heuristic"; engine: "gemini" | "zai" | "rule" }> {
   const geminiTasks = await extractTasksGemini(emails).catch(() => null);
-  if (geminiTasks) return { tasks: geminiTasks, aiStatus: "ai" };
-  return extractTasks(emails);
+  if (geminiTasks) return { tasks: geminiTasks, aiStatus: "ai", engine: "gemini" };
+  const { tasks, aiStatus } = await extractTasks(emails);
+  return { tasks, aiStatus, engine: aiStatus === "ai" ? "zai" : "rule" };
 }
 
 /**
  * GET /api/gmail/sync — fully stateless Gmail pipeline:
  *   1. read the OAuth access token from the httpOnly cookie,
  *   2. query Gmail for university email (last 30 days, max 12),
- *   3. extract strict-JSON tasks with Google Gemini (gemini-2.5-flash),
- *      silently falling back to Z.ai when Gemini is unavailable,
+ *   3. extract strict-JSON tasks with Google Gemini (primary), silently
+ *      falling back to Z.ai when Gemini is unavailable,
  *   4. return { tasks, emails, aiStatus }.
  *
  * Nothing is persisted: emails live only for the duration of this request.
@@ -53,13 +54,13 @@ export async function GET() {
 
   const attempt = async (accessToken: string) => {
     const emails = await fetchUniversityEmails(accessToken, 12);
-    const { tasks, aiStatus } = await extractWithFallback(emails);
-    return { emails, tasks: dedupeTasks(tasks), aiStatus };
+    const { tasks, aiStatus, engine } = await extractWithFallback(emails);
+    return { emails, tasks: dedupeTasks(tasks), aiStatus, engine };
   };
 
   try {
-    const { emails, tasks, aiStatus } = await attempt(token);
-    return NextResponse.json({ ok: true, tasks, emails, aiStatus });
+    const { emails, tasks, aiStatus, engine } = await attempt(token);
+    return NextResponse.json({ ok: true, tasks, emails, aiStatus, engine });
   } catch (err) {
     if (!(err instanceof GmailAuthError)) {
       console.error("[SyncMe Gmail] sync failed:", err);
@@ -80,8 +81,8 @@ export async function GET() {
 
   try {
     token = await refreshAccessToken(refreshToken);
-    const { emails, tasks, aiStatus } = await attempt(token);
-    const res = NextResponse.json({ ok: true, tasks, emails, aiStatus });
+    const { emails, tasks, aiStatus, engine } = await attempt(token);
+    const res = NextResponse.json({ ok: true, tasks, emails, aiStatus, engine });
     res.cookies.set("gmail_access_token", token, sessionCookieOptions(3500));
     return res;
   } catch (err) {

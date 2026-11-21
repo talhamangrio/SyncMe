@@ -36,6 +36,8 @@ export interface GmailSyncResponse {
   emails: RawEmail[];
   /** "ai" = Gemini (primary) or Z.ai GLM extraction, "heuristic" = deterministic fallback engine. */
   aiStatus: "ai" | "heuristic";
+  /** Which extraction engine produced the tasks (server-reported). */
+  engine?: "gemini" | "zai" | "rule";
   error?: string;
 }
 

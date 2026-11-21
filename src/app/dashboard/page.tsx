@@ -12,6 +12,14 @@ export default async function DashboardPage() {
 
   if (!isDemo && !rawUser) redirect("/");
 
+  // Saved session, dead tokens: silently reconnect via Google prompt=none —
+  // no consent screen, no clicks. The syncme_reauth marker cookie (set by the
+  // auth route, cleared by the callback) prevents a redirect loop when the
+  // Google session is truly gone; the dashboard then shows a reconnect button.
+  if (!isDemo && rawUser && !jar.get("gmail_access_token") && jar.get("syncme_reauth")?.value !== "1") {
+    redirect("/api/auth/google?mode=silent");
+  }
+
   let user: SyncMeUser = { name: "Demo Student", email: "demo.student@unideb.hu", picture: "" };
   if (rawUser) {
     try {

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
+  ArrowRight,
   BrainCircuit,
   CalendarDays,
   FlaskConical,
@@ -14,6 +15,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/logo";
 import { SiteFooter } from "@/components/site-footer";
+import { TaglineReveal } from "@/components/tagline-reveal";
+
+/** Skill B7 base curve: weighted, decelerating motion everywhere. */
+const BASE_CURVE = [0.22, 1, 0.36, 1] as const;
 
 function GoogleIcon({ className = "h-4 w-4" }: { className?: string }) {
   return (
@@ -55,7 +60,7 @@ const FEATURES = [
     num: "03",
     icon: BrainCircuit,
     title: "AI extraction",
-    desc: "GLM turns messy email threads into clean tasks: due date, priority and a one-line action summary you can actually follow.",
+    desc: "Gemini turns messy email threads into clean tasks: due date, priority and a one-line action summary you can actually follow.",
   },
   {
     num: "04",
@@ -83,6 +88,33 @@ const STEPS = [
   },
 ];
 
+const FAQS = [
+  {
+    q: "Does SyncMe store my emails?",
+    a: "No. Emails are fetched on demand, processed in memory, and discarded. Nothing is written to a database and nothing sits on our servers.",
+  },
+  {
+    q: "What exactly does SyncMe see in my Gmail?",
+    a: "Read-only access, focused on the last 30 days of academic, educational, immigration, health and professional mail. SyncMe can never send, delete, or change anything in your account.",
+  },
+  {
+    q: "Which emails get ignored?",
+    a: "Social media notifications such as LinkedIn or Facebook, newsletters, promotions, general announcements with no personal deadline, and anything you have already answered or handled.",
+  },
+  {
+    q: "Do I need to give SyncMe my Moodle password?",
+    a: "Never. You paste your private .ics calendar export URL from elearning.unideb.hu once, and it stays in your own browser.",
+  },
+  {
+    q: "What happens when two deadlines collide?",
+    a: "The conflict radar flags every day with more than one deadline, so you can reschedule or prepare before the collision becomes a problem.",
+  },
+  {
+    q: "Will I have to sign in every time?",
+    a: "No. Your session is saved on your device. When a token expires, SyncMe reconnects with Google in the background without asking you to consent again.",
+  },
+];
+
 const AUTH_ERROR_LABELS: Record<string, string> = {
   access_denied: "You declined the Google consent screen. SyncMe needs read-only access to scan your inbox.",
   not_configured: "Google OAuth is not configured on this deployment yet — add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.",
@@ -96,10 +128,12 @@ export function LandingClient({
   authError,
   oauthError,
   oauthDetail,
+  signedIn = false,
 }: {
   authError?: string;
   oauthError?: string;
   oauthDetail?: string;
+  signedIn?: boolean;
 }) {
   const banner = authError
     ? (AUTH_ERROR_LABELS[authError] ?? "Sign-in failed. Please try again.")
@@ -108,63 +142,93 @@ export function LandingClient({
           oauthDetail ? ` (${oauthDetail.slice(0, 140)})` : ""
         }`
       : null;
+
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
-      <header className="sticky top-0 z-40 border-b border-border/60 bg-background/85 backdrop-blur">
-        <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 sm:px-6">
+      {/* ── Floating compact navigation (skill B7) ─────────────────────────── */}
+      <header className="fixed inset-x-0 top-0 z-50 px-4 pt-4 sm:px-6 sm:pt-5">
+        <div className="mx-auto flex w-fit items-center gap-2 rounded-full border border-border/70 bg-background/75 py-2 pl-3 pr-2 shadow-[0_8px_30px_rgba(0,0,0,0.35)] backdrop-blur-md">
           <Logo />
+          <span aria-hidden="true" className="h-5 w-px bg-border" />
           <nav aria-label="Main navigation" className="flex items-center gap-1">
-            <Button asChild variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+            <Button
+              asChild
+              variant="ghost"
+              size="sm"
+              className="h-11 rounded-full px-3 text-muted-foreground hover:text-foreground"
+            >
               <Link href="/privacy">Privacy</Link>
             </Button>
-            <Button asChild variant="outline" size="sm" className="gap-2">
-              <a href="/api/auth/google">
-                <GoogleIcon />
-                Sign in
-              </a>
-            </Button>
+            {signedIn ? (
+              <Button asChild size="sm" className="h-11 gap-1.5 rounded-full px-3 font-semibold">
+                <Link href="/dashboard">
+                  Open dashboard
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              </Button>
+            ) : (
+              <Button asChild size="sm" className="h-11 gap-1.5 rounded-full px-3 font-semibold">
+                <a href="/api/auth/google">
+                  <GoogleIcon />
+                  Sign in
+                </a>
+              </Button>
+            )}
           </nav>
         </div>
       </header>
 
-      <main className="flex-1">
-        {/* ── Hero ─────────────────────────────────────────────────────────── */}
+      <main id="main" className="flex-1">
+        {/* ── Hero (skill B5: gradient heading, 680px caps, meaningful breaks) ─ */}
         <motion.section
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
-          className="px-4 pb-16 pt-16 text-center sm:px-6 sm:pt-24"
+          transition={{ duration: 0.5, ease: BASE_CURVE }}
+          className="px-4 pb-16 pt-24 text-center sm:px-6 sm:pb-20"
         >
           <span className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary">
             <GraduationCap className="h-3.5 w-3.5" />
             Built for University of Debrecen students
           </span>
-          <h1 className="mx-auto mt-6 max-w-3xl text-4xl font-bold leading-[1.08] tracking-tight sm:text-6xl">
+          <h1 className="mx-auto mt-6 max-w-[680px] bg-gradient-to-r from-white to-[#9B9B9B] bg-clip-text text-4xl font-semibold leading-[1.1] tracking-tight text-transparent sm:text-6xl">
             Your student admin,
             <br />
-            <span className="text-primary">on autopilot.</span>
+            on autopilot.
           </h1>
-          <p className="mx-auto mt-5 max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">
+          <p className="mx-auto mt-6 max-w-[680px] text-sm leading-relaxed text-muted-foreground sm:text-base">
             SyncMe reads your Gmail and Moodle calendar, extracts every exam, quiz, appointment and
             deadline, and tells you exactly what to do next — sorted, prioritized and conflict-checked.
           </p>
 
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <Button
-              asChild
-              size="lg"
-              className="h-12 min-w-[230px] gap-2.5 text-sm font-semibold shadow-[0_8px_30px_rgba(255,201,60,0.22)]"
-            >
-              <a href="/api/auth/google">
-                <GoogleIcon className="h-5 w-5" />
-                Sign in with Google
-              </a>
-            </Button>
+            {signedIn ? (
+              <Button
+                asChild
+                size="lg"
+                className="h-12 min-w-[230px] gap-2.5 text-sm font-semibold shadow-[0_8px_30px_rgba(255,201,60,0.22)]"
+              >
+                <Link href="/dashboard">
+                  Open my dashboard
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            ) : (
+              <Button
+                asChild
+                size="lg"
+                className="h-12 min-w-[230px] gap-2.5 text-sm font-semibold shadow-[0_8px_30px_rgba(255,201,60,0.22)]"
+              >
+                <a href="/api/auth/google">
+                  <GoogleIcon className="h-5 w-5" />
+                  Sign in with Google
+                </a>
+              </Button>
+            )}
             <Button
               asChild
               size="lg"
               variant="outline"
-              className="h-12 min-w-[210px] gap-2.5 border-border bg-transparent text-sm font-semibold text-foreground hover:bg-secondary hover:text-foreground"
+              className="h-12 min-w-[210px] gap-2.5 border-border bg-transparent text-sm font-semibold text-foreground transition-colors duration-300 ease-base hover:bg-secondary hover:text-foreground"
             >
               <a href="/api/demo/enter">
                 <FlaskConical className="h-4 w-4 text-primary" />
@@ -176,13 +240,13 @@ export function LandingClient({
           {banner && (
             <p
               role="alert"
-              className="mx-auto mt-6 max-w-md rounded-lg border border-rose-400/30 bg-rose-400/10 px-4 py-2.5 text-xs leading-relaxed text-rose-300"
+              className="mx-auto mt-6 max-w-md rounded-lg border border-rose-400/30 bg-rose-400/10 px-4 py-3 text-xs leading-relaxed text-rose-300"
             >
               {banner}
             </p>
           )}
 
-          <p className="mt-7 flex flex-wrap items-center justify-center gap-x-5 gap-y-1.5 text-[11px] text-muted-foreground/70">
+          <p className="mt-8 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground/70">
             <span className="inline-flex items-center gap-1.5">
               <ShieldCheck className="h-3 w-3 text-primary/70" /> Read-only Gmail access
             </span>
@@ -199,7 +263,7 @@ export function LandingClient({
         <section aria-label="Features" className="border-t border-border/60 px-4 py-16 sm:px-6">
           <div className="mx-auto max-w-6xl">
             <div className="flex flex-wrap items-end justify-between gap-4">
-              <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">From inbox chaos to a plan.</h2>
+              <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">From inbox chaos to a plan.</h2>
               <span className="hidden text-xs uppercase tracking-[0.22em] text-muted-foreground/70 sm:block">
                 What SyncMe does
               </span>
@@ -208,11 +272,11 @@ export function LandingClient({
               {FEATURES.map((f, i) => (
                 <motion.article
                   key={f.num}
-                  initial={{ opacity: 0, y: 14 }}
+                  initial={{ opacity: 0, y: 32 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
-                  transition={{ duration: 0.4, delay: i * 0.06 }}
-                  className="rounded-2xl border border-border/70 bg-card p-5 transition-colors hover:border-primary/40"
+                  transition={{ duration: 0.7, ease: BASE_CURVE, delay: i * 0.06 }}
+                  className="rounded-2xl border border-border/70 bg-card p-4 transition-colors duration-300 ease-base hover:border-primary/40"
                 >
                   <div className="flex items-center justify-between">
                     <f.icon className="h-5 w-5 text-primary" />
@@ -226,22 +290,25 @@ export function LandingClient({
           </div>
         </section>
 
+        {/* ── Tagline reveal (skill B11, mandatory) ────────────────────────── */}
+        <TaglineReveal />
+
         {/* ── How it works ─────────────────────────────────────────────────── */}
         <section
           aria-label="How it works"
           className="border-t border-border/60 px-4 py-16 sm:px-6"
         >
           <div className="mx-auto max-w-6xl">
-            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Three steps. Zero typing.</h2>
+            <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">Three steps. Zero typing.</h2>
             <div className="mt-8 grid gap-8 sm:grid-cols-3">
               {STEPS.map((s, i) => (
                 <motion.div
                   key={s.num}
-                  initial={{ opacity: 0, y: 14 }}
+                  initial={{ opacity: 0, y: 32 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
-                  transition={{ duration: 0.4, delay: i * 0.08 }}
-                  className="relative border-l border-border/70 pl-5"
+                  transition={{ duration: 0.7, ease: BASE_CURVE, delay: i * 0.08 }}
+                  className="relative border-l border-border/70 pl-4"
                 >
                   <span className="absolute -left-[9px] top-1 h-[17px] w-[17px] rounded-full border-2 border-primary bg-background" />
                   <span className="text-xs font-semibold uppercase tracking-widest text-primary">
@@ -253,6 +320,78 @@ export function LandingClient({
               ))}
             </div>
           </div>
+        </section>
+
+        {/* ── FAQ (skill A2: objection handling as a section, plain Q&A for AEO) ─ */}
+        <section aria-label="Frequently asked questions" className="border-t border-border/60 px-4 py-16 sm:px-6">
+          <div className="mx-auto max-w-3xl">
+            <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">Questions students actually ask.</h2>
+            <dl className="mt-8 space-y-6">
+              {FAQS.map((f) => (
+                <div key={f.q}>
+                  <dt className="text-base font-semibold text-foreground">{f.q}</dt>
+                  <dd className="mt-2 text-sm leading-relaxed text-muted-foreground">{f.a}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        </section>
+
+        {/* ── Final CTA (identical to the top, with risk reversal) ─────────── */}
+        <section aria-label="Get started" className="border-t border-border/60 px-4 py-16 text-center sm:px-6 sm:py-20">
+          <motion.div
+            initial={{ opacity: 0, y: 32 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.7, ease: BASE_CURVE }}
+            className="mx-auto max-w-[680px]"
+          >
+            <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+              Your next deadline is already in your inbox.
+            </h2>
+            <p className="mt-4 text-sm leading-relaxed text-muted-foreground sm:text-base">
+              Connect it once and never dig through university mail again.
+            </p>
+            <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+              {signedIn ? (
+                <Button
+                  asChild
+                  size="lg"
+                  className="h-12 min-w-[230px] gap-2.5 text-sm font-semibold shadow-[0_8px_30px_rgba(255,201,60,0.22)]"
+                >
+                  <Link href="/dashboard">
+                    Open my dashboard
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </Button>
+              ) : (
+                <Button
+                  asChild
+                  size="lg"
+                  className="h-12 min-w-[230px] gap-2.5 text-sm font-semibold shadow-[0_8px_30px_rgba(255,201,60,0.22)]"
+                >
+                  <a href="/api/auth/google">
+                    <GoogleIcon className="h-5 w-5" />
+                    Sign in with Google
+                  </a>
+                </Button>
+              )}
+              <Button
+                asChild
+                size="lg"
+                variant="outline"
+                className="h-12 min-w-[210px] gap-2.5 border-border bg-transparent text-sm font-semibold text-foreground transition-colors duration-300 ease-base hover:bg-secondary hover:text-foreground"
+              >
+                <a href="/api/demo/enter">
+                  <FlaskConical className="h-4 w-4 text-primary" />
+                  Try Demo Sandbox
+                </a>
+              </Button>
+            </div>
+            <p className="mt-6 text-xs text-muted-foreground/70">
+              Read-only access · no emails stored on servers · log out anytime
+            </p>
+          </motion.div>
         </section>
       </main>
 
