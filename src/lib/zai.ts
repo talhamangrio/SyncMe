@@ -21,6 +21,7 @@ Current date & time: ${nowIso} (Europe/Budapest).
 
 Rules:
 - IGNORE newsletters, promotions, spam, social media notifications (LinkedIn, Facebook, Instagram, X/Twitter, TikTok), GitHub/GitLab alerts, and emails whose events or deadlines are entirely in the PAST (before the current date/time).
+- IGNORE PERSONAL correspondence: messages between classmates or friends, chat-like small talk, "I sent a file", file-sharing notes, photos, jokes, one-word or number-only subjects ("33", "ok") — even when sent from a @unideb.hu student address. SyncMe is for institutional mail only.
 - IGNORE emails the student has ALREADY ANSWERED (their reply was sent) or where the requested action is already completed: confirmation receipts, acknowledgment emails, "we received your submission" notices.
 - EXTRACT ONLY actionable items in these scopes: ACADEMIC (deadlines, exams, Neptun admin, registration, payments), EDUCATIONAL (Moodle quizzes, assignments, homework), IMMIGRATION (residence permit, Enter Hungary, document appointments), HEALTH (Klinikák/clinic/doctor appointments), PROFESSIONAL (professor or administration correspondence with a personal action or deadline).
 - For every actionable email produce exactly ONE task object.

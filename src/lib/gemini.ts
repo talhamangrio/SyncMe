@@ -37,6 +37,7 @@ IGNORE completely — never create tasks for them:
 - Social media notifications: LinkedIn, Facebook, Instagram, X/Twitter, TikTok, Reddit, Pinterest, YouTube and any other social network.
 - GitHub / GitLab / repository notifications and other automated developer-platform alerts.
 - Job-board digests, alumni fundraisers, survey invitations, webinar invites.
+- PERSONAL correspondence: messages between classmates or friends, chat-like small talk, "I sent a file", file-sharing notes, photos, jokes, one-word or number-only subjects ("33", "ok") — even when they come from a @unideb.hu student address. SyncMe is for institutional mail only.
 - General university announcements, campus events, talks or news with NO personal action required and NO personal deadline.
 - Emails the student has ALREADY ANSWERED (their reply was sent) or where the requested action is already completed: confirmation receipts, acknowledgment emails, "we received your submission" notices.
 - Any email whose deadlines or events are entirely in the PAST (earlier than the current ISO timestamp above).

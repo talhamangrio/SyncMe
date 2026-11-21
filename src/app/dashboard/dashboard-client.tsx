@@ -52,8 +52,6 @@ import { DEMO_EMAILS, DEMO_TASKS } from "@/lib/demo-data";
 import { cn } from "@/lib/utils";
 import {
   CATEGORY_STYLES,
-  PRIORITY_DOTS,
-  PRIORITY_STYLES,
   TASK_CATEGORIES,
   type GmailSyncResponse,
   type MoodleSyncResponse,
@@ -61,6 +59,7 @@ import {
   type SyncMeUser,
   type SyncTask,
   type TaskCategory,
+  type TaskPriority,
 } from "@/lib/types";
 
 const POLL_INTERVAL_MS = 30_000;
@@ -136,7 +135,25 @@ const CATEGORY_ICONS: Record<TaskCategory, LucideIcon> = {
   Immigration: Stamp,
 };
 
-function TaskCard({
+/**
+ * Priority-first list: tasks render as one calm list grouped under three
+ * human section headers — never as a wall of boxes.
+ */
+const PRIORITY_GROUPS: {
+  key: TaskPriority;
+  label: string;
+  hint: string;
+  dot: string;
+  text: string;
+}[] = [
+  { key: "High", label: "High priority", hint: "handle these first", dot: "bg-rose-500", text: "text-rose-600" },
+  { key: "Medium", label: "Medium priority", hint: "coming up", dot: "bg-amber-500", text: "text-amber-600" },
+  { key: "Low", label: "Low priority", hint: "when you have time", dot: "bg-emerald-500", text: "text-emerald-600" },
+];
+
+const PRIORITY_RANK: Record<TaskPriority, number> = { High: 0, Medium: 1, Low: 2 };
+
+function TaskRow({
   task,
   index,
   onDone,
@@ -150,43 +167,32 @@ function TaskCard({
   const due = Date.parse(task.dueDate);
   const urgent = !Number.isNaN(due) && due - Date.now() < 48 * 3_600_000;
   return (
-    <motion.article
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1], delay: Math.min(index * 0.04, 0.32) }}
-      className="h-full"
+    <motion.li
+      initial={{ opacity: 0, x: -8 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1], delay: Math.min(index * 0.035, 0.3) }}
+      className="list-none"
     >
-      <Card className="flex h-full flex-col rounded-2xl border-border/70 bg-card shadow-soft transition-all duration-300 ease-base hover:-translate-y-0.5 hover:shadow-lift">
-        <CardContent className="flex h-full flex-col gap-3 p-5" title={`From: ${task.sourceEmailSubject}`}>
-          <div className="flex items-start gap-3">
+      <div
+        title={`From: ${task.sourceEmailSubject}`}
+        className="flex items-start gap-3 rounded-2xl border border-border/60 bg-card px-4 py-3 shadow-soft transition-all duration-300 ease-base hover:border-primary/30 hover:shadow-lift sm:px-5"
+      >
+        <span
+          className={cn(
+            "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
+            cat.chip,
+          )}
+        >
+          <CatIcon className="h-4 w-4" aria-hidden="true" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <h3 className="text-sm font-semibold leading-snug text-foreground">{task.title}</h3>
+            <span className="text-[11px] font-medium text-muted-foreground/70">{task.category}</span>
             <span
-              className={cn(
-                "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
-                cat.chip,
-              )}
-            >
-              <CatIcon className="h-[18px] w-[18px]" aria-hidden="true" />
-            </span>
-            <div className="min-w-0 flex-1 pt-0.5">
-              <h3 className="text-[15px] font-semibold leading-snug text-foreground">{task.title}</h3>
-              <p className="mt-1 text-xs font-medium text-muted-foreground">{task.category}</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => onDone(task)}
-              aria-label={`Mark "${task.title}" as done`}
-              title="Mark as done — SyncMe will skip this email from now on"
-              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted-foreground/45 transition-colors duration-300 ease-base hover:bg-emerald-50 hover:text-emerald-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring active:scale-95"
-            >
-              <CircleCheck className="h-5 w-5" />
-            </button>
-          </div>
-          <p className="text-[13px] leading-relaxed text-muted-foreground">{task.actionSummary}</p>
-          <div className="mt-auto flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-border/70 pt-3">
-            <p
               suppressHydrationWarning
               className={cn(
-                "flex items-center gap-1.5 text-xs font-medium",
+                "ml-auto inline-flex shrink-0 items-center gap-1.5 text-xs font-medium",
                 urgent ? "text-rose-600" : "text-muted-foreground",
               )}
             >
@@ -195,20 +201,23 @@ function TaskCard({
                 aria-hidden="true"
               />
               {formatDue(task.dueDate)}
-            </p>
-            <span
-              className={cn(
-                "inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider",
-                PRIORITY_STYLES[task.priority],
-              )}
-            >
-              <span className={cn("h-1.5 w-1.5 rounded-full", PRIORITY_DOTS[task.priority])} />
-              {task.priority}
             </span>
           </div>
-        </CardContent>
-      </Card>
-    </motion.article>
+          <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+            {task.actionSummary}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => onDone(task)}
+          aria-label={`Mark "${task.title}" as done`}
+          title="Mark as done — SyncMe will skip this email from now on"
+          className="-mr-1 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted-foreground/40 transition-colors duration-300 ease-base hover:bg-emerald-50 hover:text-emerald-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring active:scale-95"
+        >
+          <CircleCheck className="h-[18px] w-[18px]" />
+        </button>
+      </div>
+    </motion.li>
   );
 }
 
@@ -402,9 +411,25 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
     });
   }, [gmailTasks, moodleTasks]);
 
-  const filteredTasks = useMemo(
-    () => (filter === "All" ? allTasks : allTasks.filter((t) => t.category === filter)),
-    [allTasks, filter],
+  const filteredTasks = useMemo(() => {
+    const list = filter === "All" ? allTasks : allTasks.filter((t) => t.category === filter);
+    const dueMs = (x: SyncTask) => {
+      const d = Date.parse(x.dueDate);
+      return Number.isNaN(d) ? Number.POSITIVE_INFINITY : d;
+    };
+    // Priority first (High → Medium → Low), soonest deadline inside each group.
+    return [...list].sort(
+      (a, b) => PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority] || dueMs(a) - dueMs(b),
+    );
+  }, [allTasks, filter]);
+
+  const prioritySections = useMemo(
+    () =>
+      PRIORITY_GROUPS.map((g) => ({
+        ...g,
+        items: filteredTasks.filter((t) => t.priority === g.key),
+      })),
+    [filteredTasks],
   );
 
   const conflicts = useMemo(() => findConflicts(allTasks), [allTasks]);
@@ -616,9 +641,9 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
         <div className="mt-5 grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
           <section aria-label="Extracted tasks">
             {showSkeletons ? (
-              <div className="grid gap-4 md:grid-cols-2">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <Skeleton key={i} className="h-44 rounded-2xl bg-card" />
+              <div className="space-y-3">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Skeleton key={i} className="h-[72px] rounded-2xl bg-card" />
                 ))}
               </div>
             ) : filteredTasks.length === 0 ? (
@@ -630,7 +655,7 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
                   </p>
                   <p className="max-w-sm text-xs leading-relaxed text-muted-foreground">
                     {connected || isDemo
-                      ? "Hit “Sync Gmail Now” — SyncMe scans your last 30 days of university email and pulls out exams, quizzes, appointments and immigration letters. Tasks stay on this dashboard between syncs."
+                      ? "Hit “Sync Gmail Now” — SyncMe scans your last 30 days of university email and pulls out exams, quizzes, appointments and immigration letters. Personal chatter, notifications and junk are ignored automatically. Tasks stay on this dashboard between syncs."
                       : "Reconnect your Google account to start scanning your inbox for deadlines again. No consent screen needed."}
                   </p>
                   {!connected && !isDemo && (
@@ -641,10 +666,33 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
                 </CardContent>
               </Card>
             ) : (
-              <div className="grid gap-4 md:grid-cols-2">
-                {filteredTasks.map((t, i) => (
-                  <TaskCard key={t.id} task={t} index={i} onDone={markTaskDone} />
-                ))}
+              <div className="space-y-7">
+                {prioritySections.map(({ key, label, hint, dot, text, items }) =>
+                  items.length === 0 ? null : (
+                    <div
+                      key={key}
+                      aria-label={`${label} — ${items.length} task${items.length === 1 ? "" : "s"}`}
+                    >
+                      <div className="mb-2.5 flex items-center gap-2">
+                        <span className={cn("h-2 w-2 rounded-full", dot)} aria-hidden="true" />
+                        <h2 className={cn("text-xs font-bold uppercase tracking-wider", text)}>
+                          {label}
+                        </h2>
+                        <span className="hidden text-xs text-muted-foreground/60 sm:inline">
+                          — {hint}
+                        </span>
+                        <span className="ml-auto rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-semibold text-muted-foreground">
+                          {items.length}
+                        </span>
+                      </div>
+                      <ul className="space-y-2.5">
+                        {items.map((t, i) => (
+                          <TaskRow key={t.id} task={t} index={i} onDone={markTaskDone} />
+                        ))}
+                      </ul>
+                    </div>
+                  ),
+                )}
               </div>
             )}
           </section>

@@ -33,6 +33,7 @@ export const GMAIL_SEARCH_QUERY = [
   "-from:netflix.com",
   "-from:spotify.com",
   "-in:chats",
+  "-in:sent",
   "-category:promotions",
   "-category:social",
 ].join(" ");
@@ -43,6 +44,48 @@ const SENT_SEARCH_QUERY = "in:sent newer_than:30d";
 /** Noise senders dropped defensively even if the Gmail query lets them through. */
 const NOISE_SENDER =
   /linkedin|facebook|twitter|\bx\.com|instagram|tiktok|github|gitlab|medium\.com|reddit|quora|pinterest|youtube|netflix|spotify|noreply.*newsletter|mailer-daemon/i;
+
+/**
+ * Signals that an email carries something a student must actually DO — used by
+ * the personal-mail gate below. Includes Hungarian institutional vocabulary
+ * (vizsga, határidő, beiratkozás, konzultáció, …) so local university mail
+ * never gets mistaken for chatter.
+ */
+const ACTION_HINTS =
+  /exam|quiz|test|midterm|final|assignment|homework|deadline|due\b|submit|upload|register|registration|deregistr|appointment|klinika|clinic|doctor|medical|permit|residence|immigration|enter\s+hungary|aliens|neptun|moodle|elearning|thesis|consultation|consult|payment|tuition|fee\b|certificate|document|grade|signature|attendance|lecture|seminar|schedule|timetable|konzult|vizsga|határid|beiratkoz|jelentkez|tantárgy|értesit|hivatal|iroda|fizetés|hallgató|időpont|kinevezés|lejárat|emlékeztet|országos/i;
+
+/**
+ * Institutional system senders (Neptun, Moodle, government portals, university
+ * mailers). NOTE: a bare @unideb.hu address is deliberately NOT enough —
+ * classmates write from their student addresses too, and that mail is exactly
+ * the personal chatter SyncMe must ignore.
+ */
+const SYSTEM_SENDER =
+  /neptun|moodle|elearning|noreply|no[-_.]?reply|donotreply|do[-_.]?not[-_.]?reply|notify|notification|mailer-daemon|postmaster|enterhungary|bmbah|oif\.gov|kormany|allampolgar|tarhely|listserv|mailman|registry|helpdesk|secretar|office|klinika|kkt\.unideb|med\.unideb/i;
+
+/**
+ * Worthless-mail gate — the cheap first line of defence, applied before the
+ * AI ever sees a message. Drops:
+ *   - subjects that carry no words at all ("33", "123", "---", "🙂"),
+ *   - two-letter chit-chat subjects ("ok", "hi"),
+ *   - personal mail with NO actionable keyword anywhere and NO institutional
+ *     system sender ("I sent a file to my friend", small talk, file shares).
+ * The AI prompts carry matching IGNORE rules — the gate just saves tokens,
+ * latency and drawer clutter.
+ */
+function isStudentRelevant(email: RawEmail): boolean {
+  const subject = email.subject.trim();
+  const letters = subject.replace(/\P{L}/gu, "");
+  const digits = subject.replace(/\P{N}/gu, "");
+  // Pure numbers / symbols / emoji ("33", "2?", "1-5", "---") — worthless.
+  if (letters.length === 0) return false;
+  // Two-letter chat subjects ("ok", "hi", "CV") — not student admin.
+  if (letters.length <= 2) return false;
+  const haystack = `${subject} ${email.snippet}`;
+  if (ACTION_HINTS.test(haystack)) return true;
+  // No action keywords: keep it only when an institutional system sent it.
+  return SYSTEM_SENDER.test(email.from);
+}
 
 export function googleOAuthConfigured(): boolean {
   return Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
@@ -312,8 +355,10 @@ async function fetchAnsweredSubjects(token: string, maxResults = 40): Promise<Se
  * Speed + relevance hardening:
  *   - inbox search and sent-box scan run CONCURRENTLY,
  *   - individual messages are fetched in parallel (6 at a time),
+ *   - the student's own outgoing mail (`in:sent`) is excluded at query level,
  *   - emails the student already answered are skipped,
- *   - social-media / forge / marketing senders are dropped before the AI runs.
+ *   - social-media / forge / marketing senders are dropped before the AI runs,
+ *   - worthless personal mail (number-subjects, chatter) never reaches the AI.
  */
 export async function fetchUniversityEmails(token: string, maxResults = 12): Promise<RawEmail[]> {
   const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(
@@ -353,5 +398,6 @@ export async function fetchUniversityEmails(token: string, maxResults = 12): Pro
 
   return (fetched.filter((e): e is RawEmail => e !== null)
     .filter((e) => !NOISE_SENDER.test(e.from))
-    .filter((e) => !answered.has(normalizeSubject(e.subject))));
+    .filter((e) => !answered.has(normalizeSubject(e.subject)))
+    .filter(isStudentRelevant));
 }
