@@ -144,10 +144,10 @@ export function LandingClient({
       : null;
 
   return (
-    <div className="flex min-h-screen flex-col bg-background text-foreground">
+    <div className="flex min-h-screen flex-col text-foreground">
       {/* ── Floating compact navigation (skill B7) ─────────────────────────── */}
       <header className="fixed inset-x-0 top-0 z-50 px-4 pt-4 sm:px-6 sm:pt-5">
-        <div className="mx-auto flex w-fit items-center gap-2 rounded-full border border-border/70 bg-background/75 py-2 pl-3 pr-2 shadow-[0_8px_30px_rgba(0,0,0,0.35)] backdrop-blur-md">
+        <div className="mx-auto flex w-fit items-center gap-2 rounded-full border border-white/70 bg-white/80 py-2 pl-3 pr-2 shadow-[0_8px_30px_rgba(22,40,58,0.12)] backdrop-blur-xl">
           <Logo />
           <span aria-hidden="true" className="h-5 w-px bg-border" />
           <nav aria-label="Main navigation" className="flex items-center gap-1">
@@ -186,11 +186,11 @@ export function LandingClient({
           transition={{ duration: 0.5, ease: BASE_CURVE }}
           className="px-4 pb-16 pt-24 text-center sm:px-6 sm:pb-20"
         >
-          <span className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary">
+          <span className="inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/[0.08] px-3 py-1.5 text-xs font-medium text-primary">
             <GraduationCap className="h-3.5 w-3.5" />
             Built for University of Debrecen students
           </span>
-          <h1 className="mx-auto mt-6 max-w-[680px] bg-gradient-to-r from-white to-[#9B9B9B] bg-clip-text text-4xl font-semibold leading-[1.1] tracking-tight text-transparent sm:text-6xl">
+          <h1 className="mx-auto mt-6 max-w-[680px] bg-gradient-to-br from-[#1E3348] via-[#2A5378] to-[#5E87A8] bg-clip-text text-4xl font-semibold leading-[1.1] tracking-tight text-transparent sm:text-6xl">
             Your student admin,
             <br />
             on autopilot.
@@ -205,7 +205,7 @@ export function LandingClient({
               <Button
                 asChild
                 size="lg"
-                className="h-12 min-w-[230px] gap-2.5 text-sm font-semibold shadow-[0_8px_30px_rgba(255,201,60,0.22)]"
+                className="h-12 min-w-[230px] gap-2.5 text-sm font-semibold shadow-btn-blue"
               >
                 <Link href="/dashboard">
                   Open my dashboard
@@ -216,7 +216,7 @@ export function LandingClient({
               <Button
                 asChild
                 size="lg"
-                className="h-12 min-w-[230px] gap-2.5 text-sm font-semibold shadow-[0_8px_30px_rgba(255,201,60,0.22)]"
+                className="h-12 min-w-[230px] gap-2.5 text-sm font-semibold shadow-btn-blue"
               >
                 <a href="/api/auth/google">
                   <GoogleIcon className="h-5 w-5" />
@@ -228,7 +228,7 @@ export function LandingClient({
               asChild
               size="lg"
               variant="outline"
-              className="h-12 min-w-[210px] gap-2.5 border-border bg-transparent text-sm font-semibold text-foreground transition-colors duration-300 ease-base hover:bg-secondary hover:text-foreground"
+              className="h-12 min-w-[210px] gap-2.5 border-border bg-white/70 text-sm font-semibold text-foreground shadow-soft transition-colors duration-300 ease-base hover:bg-white"
             >
               <a href="/api/demo/enter">
                 <FlaskConical className="h-4 w-4 text-primary" />
@@ -240,7 +240,7 @@ export function LandingClient({
           {banner && (
             <p
               role="alert"
-              className="mx-auto mt-6 max-w-md rounded-lg border border-rose-400/30 bg-rose-400/10 px-4 py-3 text-xs leading-relaxed text-rose-300"
+              className="mx-auto mt-6 max-w-md rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs leading-relaxed text-rose-700"
             >
               {banner}
             </p>
@@ -276,7 +276,7 @@ export function LandingClient({
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
                   transition={{ duration: 0.7, ease: BASE_CURVE, delay: i * 0.06 }}
-                  className="rounded-2xl border border-border/70 bg-card p-4 transition-colors duration-300 ease-base hover:border-primary/40"
+                  className="rounded-2xl border border-border/70 bg-white/80 p-5 shadow-soft backdrop-blur-sm transition-all duration-300 ease-base hover:-translate-y-1 hover:border-primary/30 hover:shadow-lift"
                 >
                   <div className="flex items-center justify-between">
                     <f.icon className="h-5 w-5 text-primary" />
@@ -310,7 +310,7 @@ export function LandingClient({
                   transition={{ duration: 0.7, ease: BASE_CURVE, delay: i * 0.08 }}
                   className="relative border-l border-border/70 pl-4"
                 >
-                  <span className="absolute -left-[9px] top-1 h-[17px] w-[17px] rounded-full border-2 border-primary bg-background" />
+                  <span className="absolute -left-[9px] top-1 h-[17px] w-[17px] rounded-full border-2 border-primary bg-white shadow-soft" />
                   <span className="text-xs font-semibold uppercase tracking-widest text-primary">
                     Step {s.num}
                   </span>
@@ -357,7 +357,7 @@ export function LandingClient({
                 <Button
                   asChild
                   size="lg"
-                  className="h-12 min-w-[230px] gap-2.5 text-sm font-semibold shadow-[0_8px_30px_rgba(255,201,60,0.22)]"
+                  className="h-12 min-w-[230px] gap-2.5 text-sm font-semibold shadow-btn-blue"
                 >
                   <Link href="/dashboard">
                     Open my dashboard
@@ -368,7 +368,7 @@ export function LandingClient({
                 <Button
                   asChild
                   size="lg"
-                  className="h-12 min-w-[230px] gap-2.5 text-sm font-semibold shadow-[0_8px_30px_rgba(255,201,60,0.22)]"
+                  className="h-12 min-w-[230px] gap-2.5 text-sm font-semibold shadow-btn-blue"
                 >
                   <a href="/api/auth/google">
                     <GoogleIcon className="h-5 w-5" />
@@ -380,7 +380,7 @@ export function LandingClient({
                 asChild
                 size="lg"
                 variant="outline"
-                className="h-12 min-w-[210px] gap-2.5 border-border bg-transparent text-sm font-semibold text-foreground transition-colors duration-300 ease-base hover:bg-secondary hover:text-foreground"
+                className="h-12 min-w-[210px] gap-2.5 border-border bg-white/70 text-sm font-semibold text-foreground shadow-soft transition-colors duration-300 ease-base hover:bg-white"
               >
                 <a href="/api/demo/enter">
                   <FlaskConical className="h-4 w-4 text-primary" />

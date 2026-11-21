@@ -49,17 +49,25 @@ export interface MoodleSyncResponse {
 
 export const TASK_CATEGORIES: TaskCategory[] = ["Neptun", "Moodle", "Medical", "Immigration"];
 
-export const CATEGORY_STYLES: Record<TaskCategory, { badge: string; dot: string }> = {
-  Neptun: { badge: "border-amber-400/40 bg-amber-400/10 text-amber-300", dot: "bg-amber-400" },
-  Moodle: { badge: "border-emerald-400/40 bg-emerald-400/10 text-emerald-300", dot: "bg-emerald-400" },
-  Medical: { badge: "border-rose-400/40 bg-rose-400/10 text-rose-300", dot: "bg-rose-400" },
-  Immigration: { badge: "border-orange-400/40 bg-orange-400/10 text-orange-300", dot: "bg-orange-400" },
+/** Light-theme category styling: a soft tinted chip behind the category icon. */
+export const CATEGORY_STYLES: Record<TaskCategory, { chip: string; dot: string }> = {
+  Neptun: { chip: "bg-sky-50 text-sky-600 ring-1 ring-inset ring-sky-100", dot: "bg-sky-500" },
+  Moodle: { chip: "bg-emerald-50 text-emerald-600 ring-1 ring-inset ring-emerald-100", dot: "bg-emerald-500" },
+  Medical: { chip: "bg-rose-50 text-rose-600 ring-1 ring-inset ring-rose-100", dot: "bg-rose-500" },
+  Immigration: { chip: "bg-amber-50 text-amber-600 ring-1 ring-inset ring-amber-100", dot: "bg-amber-500" },
 };
 
+/** Light-theme priority styling: quiet colored text + matching dot. */
 export const PRIORITY_STYLES: Record<TaskPriority, string> = {
-  High: "border-rose-400/40 bg-rose-400/10 text-rose-300",
-  Medium: "border-amber-400/40 bg-amber-400/10 text-amber-300",
-  Low: "border-emerald-400/40 bg-emerald-400/10 text-emerald-300",
+  High: "text-rose-600",
+  Medium: "text-amber-600",
+  Low: "text-emerald-600",
+};
+
+export const PRIORITY_DOTS: Record<TaskPriority, string> = {
+  High: "bg-rose-500",
+  Medium: "bg-amber-500",
+  Low: "bg-emerald-500",
 };
 
 /** Normalize/validate one raw task object coming from the AI or heuristics. */

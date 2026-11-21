@@ -44,78 +44,79 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* ─── SyncMe — dark editorial palette ───────────────────────────────────────
-   Deep Charcoal #181818 · Card Slate #1f1f1f · Crisp Silver #E4E5E7
-   Signal Yellow #FFC93C                                                     */
+/* ─── SyncMe — calm daylight palette ────────────────────────────────────────
+   Airy White #F6F9FC · Pure Card #FFFFFF · Deep Calm Slate #16283A
+   Clear Sky Blue #2578BF — minimalist, natural, high contrast               */
 :root {
-  --radius: 0.625rem;
-  --background: #181818;
-  --foreground: #e4e5e7;
-  --card: #1f1f1f;
-  --card-foreground: #e4e5e7;
-  --popover: #272727;
-  --popover-foreground: #e4e5e7;
-  --primary: #ffc93c;
-  --primary-foreground: #181818;
-  --secondary: #313131;
-  --secondary-foreground: #e4e5e7;
-  --muted: #272727;
-  --muted-foreground: #9a9ca1;
-  --accent: #313131;
-  --accent-foreground: #ffc93c;
-  --destructive: #e5484d;
+  --radius: 0.75rem;
+  --background: #f6f9fc;
+  --foreground: #16283a;
+  --card: #ffffff;
+  --card-foreground: #16283a;
+  --popover: #ffffff;
+  --popover-foreground: #16283a;
+  --primary: #2578bf;
+  --primary-foreground: #ffffff;
+  --secondary: #e9f1f8;
+  --secondary-foreground: #2a4a67;
+  --muted: #eef3f8;
+  --muted-foreground: #5b7086;
+  --accent: #e8f1fa;
+  --accent-foreground: #1d5f94;
+  --destructive: #d64550;
   --destructive-foreground: #ffffff;
-  --border: #34363b;
-  --input: #34363b;
-  --ring: #ffc93c;
-  --chart-1: #ffc93c;
-  --chart-2: #e5484d;
-  --chart-3: #34d27b;
-  --chart-4: #e4e5e7;
-  --chart-5: #9a9ca1;
-  --sidebar: #1f1f1f;
-  --sidebar-foreground: #e4e5e7;
-  --sidebar-primary: #ffc93c;
-  --sidebar-primary-foreground: #181818;
-  --sidebar-accent: #313131;
-  --sidebar-accent-foreground: #e4e5e7;
-  --sidebar-border: #34363b;
-  --sidebar-ring: #ffc93c;
+  --border: #e2eaf2;
+  --input: #d8e3ee;
+  --ring: #7fb7e3;
+  --chart-1: #2578bf;
+  --chart-2: #34a97b;
+  --chart-3: #e5a13c;
+  --chart-4: #d64550;
+  --chart-5: #8aa2b8;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #16283a;
+  --sidebar-primary: #2578bf;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e8f1fa;
+  --sidebar-accent-foreground: #1d5f94;
+  --sidebar-border: #e2eaf2;
+  --sidebar-ring: #7fb7e3;
 }
 
+/* Safety mirror: even if a .dark class is ever toggled, SyncMe stays light. */
 .dark {
-  --background: #181818;
-  --foreground: #e4e5e7;
-  --card: #1f1f1f;
-  --card-foreground: #e4e5e7;
-  --popover: #272727;
-  --popover-foreground: #e4e5e7;
-  --primary: #ffc93c;
-  --primary-foreground: #181818;
-  --secondary: #313131;
-  --secondary-foreground: #e4e5e7;
-  --muted: #272727;
-  --muted-foreground: #9a9ca1;
-  --accent: #313131;
-  --accent-foreground: #ffc93c;
-  --destructive: #e5484d;
+  --background: #f6f9fc;
+  --foreground: #16283a;
+  --card: #ffffff;
+  --card-foreground: #16283a;
+  --popover: #ffffff;
+  --popover-foreground: #16283a;
+  --primary: #2578bf;
+  --primary-foreground: #ffffff;
+  --secondary: #e9f1f8;
+  --secondary-foreground: #2a4a67;
+  --muted: #eef3f8;
+  --muted-foreground: #5b7086;
+  --accent: #e8f1fa;
+  --accent-foreground: #1d5f94;
+  --destructive: #d64550;
   --destructive-foreground: #ffffff;
-  --border: #34363b;
-  --input: #34363b;
-  --ring: #ffc93c;
-  --chart-1: #ffc93c;
-  --chart-2: #e5484d;
-  --chart-3: #34d27b;
-  --chart-4: #e4e5e7;
-  --chart-5: #9a9ca1;
-  --sidebar: #1f1f1f;
-  --sidebar-foreground: #e4e5e7;
-  --sidebar-primary: #ffc93c;
-  --sidebar-primary-foreground: #181818;
-  --sidebar-accent: #313131;
-  --sidebar-accent-foreground: #e4e5e7;
-  --sidebar-border: #34363b;
-  --sidebar-ring: #ffc93c;
+  --border: #e2eaf2;
+  --input: #d8e3ee;
+  --ring: #7fb7e3;
+  --chart-1: #2578bf;
+  --chart-2: #34a97b;
+  --chart-3: #e5a13c;
+  --chart-4: #d64550;
+  --chart-5: #8aa2b8;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #16283a;
+  --sidebar-primary: #2578bf;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e8f1fa;
+  --sidebar-accent-foreground: #1d5f94;
+  --sidebar-border: #e2eaf2;
+  --sidebar-ring: #7fb7e3;
 }
 
 @layer base {
@@ -123,17 +124,49 @@
     @apply border-border outline-ring/50;
   }
   html {
-    color-scheme: dark;
+    color-scheme: light;
   }
   body {
     @apply bg-background text-foreground;
   }
 }
 
-/* ─── Slim editorial scrollbar for long lists ─────────────────────────────── */
+/* ─── Gradient daylight backdrop — soft light blobs behind every page ───────
+   A fixed, pointer-transparent layer: sky blue top-left, aqua top-right,
+   mint low-center. Static and subtle — no noise, no animation.              */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(56rem 34rem at 10% -10%, rgba(124, 189, 233, 0.24), transparent 62%),
+    radial-gradient(48rem 30rem at 92% -6%, rgba(150, 213, 226, 0.18), transparent 60%),
+    radial-gradient(52rem 36rem at 46% 112%, rgba(186, 228, 205, 0.16), transparent 62%);
+}
+
+/* ─── Soft elevation utilities (Tailwind v4 custom shadows) ───────────────── */
+@utility shadow-soft {
+  box-shadow:
+    0 1px 2px rgba(22, 40, 58, 0.05),
+    0 16px 40px -24px rgba(22, 40, 58, 0.22);
+}
+
+@utility shadow-lift {
+  box-shadow:
+    0 2px 4px rgba(22, 40, 58, 0.06),
+    0 24px 48px -20px rgba(22, 40, 58, 0.26);
+}
+
+@utility shadow-btn-blue {
+  box-shadow: 0 8px 24px -8px rgba(37, 120, 191, 0.55);
+}
+
+/* ─── Slim scrollbar tuned for the light theme ────────────────────────────── */
 .scrollbar-slim {
   scrollbar-width: thin;
-  scrollbar-color: #45484e transparent;
+  scrollbar-color: #c3d4e4 transparent;
 }
 .scrollbar-slim::-webkit-scrollbar {
   width: 6px;
@@ -143,25 +176,38 @@
   background: transparent;
 }
 .scrollbar-slim::-webkit-scrollbar-thumb {
-  background: #45484e;
+  background: #c3d4e4;
   border-radius: 999px;
 }
 .scrollbar-slim::-webkit-scrollbar-thumb:hover {
-  background: #5a5e66;
+  background: #a9c1d7;
 }
 
-/* ─── Signal Yellow pulse dot for live status pills ───────────────────────── */
+/* ─── Live pulse dot for status pills (blue) + amber variant for warnings ── */
 @keyframes syncme-live {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(255, 201, 60, 0.55);
+    box-shadow: 0 0 0 0 rgba(37, 120, 191, 0.45);
   }
   50% {
-    box-shadow: 0 0 0 5px rgba(255, 201, 60, 0);
+    box-shadow: 0 0 0 5px rgba(37, 120, 191, 0);
   }
 }
 .live-dot {
   animation: syncme-live 1.8s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+@keyframes syncme-live-amber {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(229, 161, 60, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(229, 161, 60, 0);
+  }
+}
+.live-dot-amber {
+  animation: syncme-live-amber 1.8s cubic-bezier(0.22, 1, 0.36, 1) infinite;
 }
 
 /* ─── Design-skill motion utilities ──────────────────────────────────────────

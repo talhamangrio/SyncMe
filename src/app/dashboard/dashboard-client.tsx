@@ -5,19 +5,23 @@ import { format } from "date-fns";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import {
+  BookOpen,
   CalendarClock,
   CalendarPlus,
   CheckCircle2,
   CircleCheck,
   FlaskConical,
+  GraduationCap,
+  HeartPulse,
   Inbox,
   Loader2,
   LogOut,
-  Mail,
   MailWarning,
   RefreshCw,
   ShieldCheck,
+  Stamp,
   Zap,
+  type LucideIcon,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -48,6 +52,7 @@ import { DEMO_EMAILS, DEMO_TASKS } from "@/lib/demo-data";
 import { cn } from "@/lib/utils";
 import {
   CATEGORY_STYLES,
+  PRIORITY_DOTS,
   PRIORITY_STYLES,
   TASK_CATEGORIES,
   type GmailSyncResponse,
@@ -123,6 +128,14 @@ function initialsOf(name: string): string {
   return chars.slice(0, 2) || "S";
 }
 
+/** A friendly icon per category — natural metaphors instead of tech jargon. */
+const CATEGORY_ICONS: Record<TaskCategory, LucideIcon> = {
+  Neptun: GraduationCap,
+  Moodle: BookOpen,
+  Medical: HeartPulse,
+  Immigration: Stamp,
+};
+
 function TaskCard({
   task,
   index,
@@ -133,6 +146,9 @@ function TaskCard({
   onDone: (task: SyncTask) => void;
 }) {
   const cat = CATEGORY_STYLES[task.category];
+  const CatIcon = CATEGORY_ICONS[task.category];
+  const due = Date.parse(task.dueDate);
+  const urgent = !Number.isNaN(due) && due - Date.now() < 48 * 3_600_000;
   return (
     <motion.article
       initial={{ opacity: 0, y: 10 }}
@@ -140,47 +156,56 @@ function TaskCard({
       transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1], delay: Math.min(index * 0.04, 0.32) }}
       className="h-full"
     >
-      <Card className="flex h-full flex-col border-border/80 bg-card transition-colors duration-300 ease-base hover:border-primary/40">
-        <CardContent className="flex h-full flex-col gap-2 p-4">
-          <div className="flex flex-wrap items-center gap-2">
+      <Card className="flex h-full flex-col rounded-2xl border-border/70 bg-card shadow-soft transition-all duration-300 ease-base hover:-translate-y-0.5 hover:shadow-lift">
+        <CardContent className="flex h-full flex-col gap-3 p-5" title={`From: ${task.sourceEmailSubject}`}>
+          <div className="flex items-start gap-3">
             <span
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium",
-                cat.badge,
+                "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
+                cat.chip,
               )}
             >
-              <span className={cn("h-1.5 w-1.5 rounded-full", cat.dot)} />
-              {task.category}
+              <CatIcon className="h-[18px] w-[18px]" aria-hidden="true" />
             </span>
-            <span
-              className={cn(
-                "inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold",
-                PRIORITY_STYLES[task.priority],
-              )}
-            >
-              {task.priority}
-            </span>
+            <div className="min-w-0 flex-1 pt-0.5">
+              <h3 className="text-[15px] font-semibold leading-snug text-foreground">{task.title}</h3>
+              <p className="mt-1 text-xs font-medium text-muted-foreground">{task.category}</p>
+            </div>
             <button
               type="button"
               onClick={() => onDone(task)}
               aria-label={`Mark "${task.title}" as done`}
               title="Mark as done — SyncMe will skip this email from now on"
-              className="ml-auto inline-flex min-h-11 items-center gap-1.5 rounded-full border border-border bg-background/60 px-3 py-1 text-xs font-medium text-muted-foreground transition-colors duration-300 ease-base hover:border-emerald-400/40 hover:text-emerald-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring active:scale-[0.98]"
+              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted-foreground/45 transition-colors duration-300 ease-base hover:bg-emerald-50 hover:text-emerald-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring active:scale-95"
             >
-              <CircleCheck className="h-3.5 w-3.5" />
-              Done
+              <CircleCheck className="h-5 w-5" />
             </button>
           </div>
-          <h3 className="text-sm font-semibold leading-snug text-foreground">{task.title}</h3>
-          <p suppressHydrationWarning className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <CalendarClock className="h-3.5 w-3.5 shrink-0 text-primary" />
-            {formatDue(task.dueDate)}
-          </p>
-          <p className="text-xs leading-relaxed text-muted-foreground">{task.actionSummary}</p>
-          <p className="mt-auto flex items-center gap-1.5 pt-1 text-xs text-muted-foreground/70">
-            <Mail className="h-3 w-3 shrink-0" />
-            <span className="w-0 flex-1 truncate">{task.sourceEmailSubject}</span>
-          </p>
+          <p className="text-[13px] leading-relaxed text-muted-foreground">{task.actionSummary}</p>
+          <div className="mt-auto flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-border/70 pt-3">
+            <p
+              suppressHydrationWarning
+              className={cn(
+                "flex items-center gap-1.5 text-xs font-medium",
+                urgent ? "text-rose-600" : "text-muted-foreground",
+              )}
+            >
+              <CalendarClock
+                className={cn("h-3.5 w-3.5 shrink-0", urgent ? "text-rose-500" : "text-sky-500")}
+                aria-hidden="true"
+              />
+              {formatDue(task.dueDate)}
+            </p>
+            <span
+              className={cn(
+                "inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider",
+                PRIORITY_STYLES[task.priority],
+              )}
+            >
+              <span className={cn("h-1.5 w-1.5 rounded-full", PRIORITY_DOTS[task.priority])} />
+              {task.priority}
+            </span>
+          </div>
         </CardContent>
       </Card>
     </motion.article>
@@ -393,9 +418,9 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
   const showSkeletons = syncing && allTasks.length === 0;
 
   return (
-    <div className="flex min-h-screen flex-col bg-background text-foreground">
+    <div className="flex min-h-screen flex-col text-foreground">
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-40 border-b border-border/60 bg-background/90 backdrop-blur">
+      <header className="sticky top-0 z-40 border-b border-border/70 bg-background/75 backdrop-blur-xl">
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
           <Logo />
           <div className="flex items-center gap-2 sm:gap-3">
@@ -428,7 +453,7 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
       <main id="main" className="mx-auto w-full max-w-6xl flex-1 px-4 pb-14 pt-6 sm:px-6">
         {/* ── Demo banner ──────────────────────────────────────────────────── */}
         {isDemo && (
-          <div className="mb-5 flex flex-wrap items-center gap-2 rounded-xl border border-primary/30 bg-primary/[0.07] px-4 py-3 text-sm">
+          <div className="mb-5 flex flex-wrap items-center gap-2 rounded-2xl border border-primary/25 bg-primary/[0.06] px-4 py-3 text-sm shadow-soft">
             <FlaskConical className="h-4 w-4 shrink-0 text-primary" />
             <p className="text-muted-foreground">
               <strong className="font-semibold text-primary">Demo Sandbox</strong> — simulated Debrecen
@@ -446,17 +471,17 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
           <Button
             onClick={() => void syncNow()}
             disabled={syncing || (!isDemo && !connected)}
-            className="gap-2 font-semibold"
+            className="gap-2 font-semibold shadow-btn-blue"
           >
             {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             Sync Gmail Now
           </Button>
-          <span className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground">
+          <span className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3.5 py-1.5 text-xs text-muted-foreground">
             <span
               suppressHydrationWarning
               className={cn(
                 "h-2 w-2 rounded-full",
-                isDemo ? "bg-primary live-dot" : connected ? "bg-emerald-400 live-dot" : "bg-zinc-500",
+                isDemo ? "bg-primary live-dot" : connected ? "bg-emerald-500 live-dot" : "bg-slate-400",
               )}
             />
             {isDemo ? "Demo mode" : connected ? "Gmail connected" : "Gmail disconnected"}
@@ -475,7 +500,7 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
                   Raw emails ({emails.length})
                 </Button>
               </SheetTrigger>
-              <SheetContent side="right" className="w-full border-border bg-card sm:max-w-md">
+              <SheetContent side="right" className="w-full border-border bg-card shadow-lift sm:max-w-md">
                 <SheetHeader>
                   <SheetTitle>Raw emails</SheetTitle>
                   <SheetDescription>
@@ -490,7 +515,7 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
                     </p>
                   )}
                   {emails.map((e) => (
-                    <div key={e.id} className="rounded-xl border border-border/70 bg-background/60 p-3">
+                    <div key={e.id} className="rounded-xl border border-border/70 bg-muted/50 p-3">
                       <p className="text-xs font-semibold leading-snug text-foreground">{e.subject}</p>
                       <p className="mt-1 truncate text-xs text-muted-foreground">{e.from}</p>
                       <p suppressHydrationWarning className="text-xs text-muted-foreground/70">
@@ -508,7 +533,7 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
             <Dialog open={moodleOpen} onOpenChange={setMoodleOpen}>
               <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setMoodleOpen(true)}>
                 {moodleConnected ? (
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
                 ) : (
                   <CalendarPlus className="h-3.5 w-3.5" />
                 )}
@@ -550,11 +575,11 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
             {conflicts.map((c) => (
               <div
                 key={c.dateKey}
-                className="flex items-start gap-3 rounded-xl border border-primary/30 bg-primary/[0.07] px-4 py-3"
+                className="flex items-start gap-3 rounded-2xl border border-amber-300/70 bg-amber-50/90 px-4 py-3 shadow-soft"
               >
-                <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-primary live-dot" />
+                <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-amber-500 live-dot-amber" />
                 <div className="text-sm leading-relaxed">
-                  <span className="font-semibold text-primary">
+                  <span className="font-semibold text-amber-700">
                     {c.tasks.length} deadlines collide on {c.dateLabel}.
                   </span>{" "}
                   <span className="text-muted-foreground">{c.tasks.map((t) => t.title).join(" · ")}</span>
@@ -573,9 +598,9 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
               onClick={() => setFilter(c)}
               aria-pressed={filter === c}
               className={cn(
-                "min-h-11 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors duration-300 ease-base",
+                "min-h-11 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-all duration-300 ease-base",
                 filter === c
-                  ? "border-primary bg-primary text-primary-foreground"
+                  ? "border-transparent bg-primary text-primary-foreground shadow-btn-blue"
                   : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground",
               )}
             >
@@ -597,7 +622,7 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
                 ))}
               </div>
             ) : filteredTasks.length === 0 ? (
-              <Card className="border-dashed border-border">
+              <Card className="rounded-2xl border-dashed border-border bg-card/70 shadow-soft">
                 <CardContent className="flex flex-col items-center gap-3 py-14 text-center">
                   <Inbox className="h-8 w-8 text-muted-foreground/60" />
                   <p className="text-sm font-semibold text-foreground">
@@ -625,7 +650,7 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
           </section>
 
           <aside className="space-y-4" aria-label="Sync status">
-            <Card className="border-border/80 bg-card">
+            <Card className="rounded-2xl border-border/70 bg-card shadow-soft">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm">Sync status</CardTitle>
                 <CardDescription className="text-xs">Auto-refreshes every 30 seconds.</CardDescription>
@@ -636,7 +661,7 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
                   <span
                     className={cn(
                       "inline-flex items-center gap-1.5 font-medium",
-                      connected || isDemo ? "text-emerald-300" : "text-rose-300",
+                      connected || isDemo ? "text-emerald-600" : "text-rose-600",
                     )}
                   >
                     {(connected || isDemo) && <CheckCircle2 className="h-3.5 w-3.5" />}
@@ -658,7 +683,7 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
                   <span
                     className={cn(
                       "inline-flex items-center gap-1.5 font-medium",
-                      moodleConnected ? "text-emerald-300" : "text-muted-foreground",
+                      moodleConnected ? "text-emerald-600" : "text-muted-foreground",
                     )}
                   >
                     {moodleConnected && <CheckCircle2 className="h-3.5 w-3.5" />}
@@ -688,7 +713,7 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
               </CardContent>
             </Card>
 
-            <Card className="border-border/80 bg-card">
+            <Card className="rounded-2xl border-border/70 bg-card shadow-soft">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm">Moodle feed</CardTitle>
               </CardHeader>
@@ -705,7 +730,7 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
               </CardContent>
             </Card>
 
-            <Card className="border-border/80 bg-card">
+            <Card className="rounded-2xl border-border/70 bg-card shadow-soft">
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-sm">
                   <ShieldCheck className="h-4 w-4 text-primary" />

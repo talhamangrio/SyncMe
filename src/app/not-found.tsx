@@ -4,9 +4,9 @@ import { Button } from "@/components/ui/button";
 
 export default function NotFound() {
   return (
-    <div className="flex min-h-screen flex-col bg-background text-foreground">
+    <div className="flex min-h-screen flex-col text-foreground">
       <main id="main" className="flex flex-1 flex-col items-center justify-center gap-6 px-4 py-16 text-center">
-        <span className="flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-card">
+        <span className="flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-card shadow-soft">
           <Compass className="h-6 w-6 text-primary" />
         </span>
         <div>

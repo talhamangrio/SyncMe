@@ -44,7 +44,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}>
         <a
           href="#main"
@@ -53,7 +53,7 @@ export default function RootLayout({
           Skip to content
         </a>
         {children}
-        <Toaster theme="dark" position="top-right" richColors closeButton />
+        <Toaster theme="light" position="top-right" richColors closeButton />
       </body>
     </html>
   );
