@@ -1,4 +1,4 @@
-// ─── Z.ai GLM extraction engine (glm-4.7-flash via OpenAI-compatible API) ───
+// ─── Z.ai GLM extraction engine (OpenAI-compatible API) ─────────────────────
 // Sends the fetched email list + current ISO date/time to Z.ai and parses the
 // strict-JSON response into SyncMe tasks. Falls back to the bundled Z.ai SDK
 // and finally to a deterministic rule engine — the pipeline never hard-fails.
@@ -7,8 +7,11 @@ import type { RawEmail, SyncTask, TaskCategory, TaskPriority } from "@/lib/types
 import { sanitizeTask } from "@/lib/types";
 
 const ZAI_ENDPOINT = "https://api.z.ai/api/paas/v4/chat/completions";
-const PRIMARY_MODEL = process.env.ZAI_MODEL || "glm-4.7-flash";
-const FALLBACK_MODELS = ["glm-4.5-air", "glm-4-flash"];
+// glm-4.5-flash is the free tier workhorse (verified live: strict JSON with
+// thinking disabled). glm-4.7-flash / glm-4.6 / glm-4.5-air require a paid
+// resource package — they are fallbacks that only engage if balance exists.
+const PRIMARY_MODEL = process.env.ZAI_MODEL || "glm-4.5-flash";
+const FALLBACK_MODELS = ["glm-4.7-flash", "glm-4.6"];
 const AI_TIMEOUT_MS = 30_000;
 
 function buildSystemPrompt(nowIso: string): string {
@@ -71,7 +74,9 @@ async function callModel(model: string, emails: RawEmail[], nowIso: string): Pro
     body: JSON.stringify({
       model,
       temperature: 0.2,
-      max_tokens: 2000,
+      max_tokens: 4000,
+      // Disable chain-of-thought for fast, deterministic structured extraction.
+      thinking: { type: "disabled" },
       messages: [
         { role: "system", content: buildSystemPrompt(nowIso) },
         { role: "user", content: buildUserPrompt(emails, nowIso) },

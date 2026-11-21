@@ -2,7 +2,7 @@
 
 **SyncMe** reads your Gmail and Moodle calendar, extracts every exam, quiz, appointment and deadline, and tells you exactly what to do next — sorted, prioritized and conflict-checked. Built for University of Debrecen students.
 
-![Stack](https://img.shields.io/badge/Next.js%2016-App%20Router-black) ![AI](https://img.shields.io/badge/Z.ai-glm--4.7--flash-FFC93C) ![Auth](https://img.shields.io/badge/Google_OAuth-gmail.readonly-4285F4)
+![Stack](https://img.shields.io/badge/Next.js%2016-App%20Router-black) ![AI](https://img.shields.io/badge/Z.ai-glm--4.5--flash-FFC93C) ![Auth](https://img.shields.io/badge/Google_OAuth-gmail.readonly-4285F4)
 
 ## How it works
 
@@ -13,7 +13,7 @@ Demo Sandbox (one click, zero credentials)          ──►  GET  /api/demo/en
 ```
 
 - **Read-only Gmail access** (`gmail.readonly`) — the last 30 days of university email are scanned, never stored.
-- **Z.ai GLM extraction** (`glm-4.7-flash`) — emails + current ISO date/time in, strict JSON tasks out (`{ title, category: Neptun|Moodle|Medical|Immigration, dueDate, priority, actionSummary, sourceEmailSubject }`).
+- **Z.ai GLM extraction** (`glm-4.5-flash`) — emails + current ISO date/time in, strict JSON tasks out (`{ title, category: Neptun|Moodle|Medical|Immigration, dueDate, priority, actionSummary, sourceEmailSubject }`).
 - **Conflict radar** — days holding 2+ deadlines raise yellow collision alerts.
 - **Demo Sandbox** — a simulated Debrecen inbox with dynamically generated dates, so demos work on any day without credentials.
 - **Zero storage** — no database: tokens live in a short-lived httpOnly cookie (~1h), emails are processed transiently in memory and discarded.
@@ -56,7 +56,7 @@ bun run dev                  # http://localhost:3000
 | `/api/auth/google` | GET | Start Google OAuth (openid email profile + gmail.readonly) |
 | `/api/auth/callback` | GET | Exchange code → httpOnly cookie (`gmail_access_token`, maxAge 3500) + profile session cookie → `/dashboard` |
 | `/api/auth/logout` | POST | Clear SyncMe cookies, return to `/` |
-| `/api/gmail/sync` | GET | Gmail (last 30d, max 12) → Z.ai `glm-4.7-flash` strict-JSON extraction |
+| `/api/gmail/sync` | GET | Gmail (last 30d, max 12) → Z.ai `glm-4.5-flash` strict-JSON extraction |
 | `/api/moodle/sync` | POST | `{ icsUrl }` → server-side fetch + VEVENT parse → normalized tasks |
 | `/api/demo/enter` | GET | Set demo cookie → `/dashboard` (simulated inbox) |
 
