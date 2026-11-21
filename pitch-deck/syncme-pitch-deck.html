@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SyncMe — Smart Campus Hackathon Pitch Deck</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  /* ── Fixed canvas: 5 landscape pages, 1280 × 720 ───────────────────────── */
+  @page { size: 1280px 720px; margin: 0; }
+  html, body {
+    margin: 0; padding: 0; width: 1280px;
+    background: #F6F9FC;
+    font-family: 'Inter', sans-serif;
+    color: #16283A;
+    -webkit-font-smoothing: antialiased;
+  }
+  * { box-sizing: border-box; }
+
+  .page {
+    width: 1280px; height: 720px;
+    position: relative;
+    padding: 48px 64px 44px;
+    display: flex; flex-direction: column;
+  }
+
+  /* Browser preview auto-scale (print output unaffected) */
+  @media screen {
+    html { height: auto; display: flex; justify-content: center; background: #F6F9FC; }
+    body { transform-origin: top center; scale: min(1, calc(100vw / 1280)); margin: 0 auto; }
+  }
+
+  /* Daylight gradient blobs — contained, no negative offsets */
+  .bg {
+    position: absolute; inset: 0; pointer-events: none;
+    background:
+      radial-gradient(520px 300px at 8% -6%, rgba(124,189,233,0.20), transparent 62%),
+      radial-gradient(460px 280px at 94% -8%, rgba(150,213,226,0.16), transparent 60%),
+      radial-gradient(500px 320px at 50% 112%, rgba(186,228,205,0.15), transparent 62%);
+  }
+  .page > * { position: relative; }
+
+  /* ── Shared chrome ─────────────────────────────────────────────────────── */
+  .hd { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .mark {
+    width: 34px; height: 34px; border-radius: 10px;
+    background: linear-gradient(135deg, #4AA3DB, #2578BF);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 12px -3px rgba(37,120,191,0.45);
+  }
+  .mark svg { width: 17px; height: 17px; fill: #fff; }
+  .wordmark { font-size: 19px; font-weight: 700; letter-spacing: -0.01em; }
+  .wordmark b { color: #2578BF; font-weight: 800; }
+  .kicker {
+    font-size: 12px; font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase;
+    color: #2578BF;
+  }
+  .foot {
+    margin-top: auto; display: flex; align-items: center; justify-content: space-between;
+    border-top: 1px solid #DDE7F0; padding-top: 14px;
+    font-size: 11px; color: #5B7086; letter-spacing: 0.06em;
+  }
+  .foot .no { font-weight: 700; color: #16283A; }
+
+  .headline { font-size: 46px; line-height: 1.08; font-weight: 800; letter-spacing: -0.02em; margin: 18px 0 0; }
+  .headline .hl { color: #2578BF; }
+  .sub { font-size: 16px; line-height: 1.6; color: #5B7086; max-width: 900px; margin-top: 14px; }
+
+  /* ── Page 1 ────────────────────────────────────────────────────────────── */
+  .p1-grid { display: flex; gap: 40px; margin-top: 30px; flex: 1; min-height: 0; }
+  .p1-left { width: 46%; display: flex; flex-direction: column; }
+  .p1-right { flex: 1; min-width: 0; }
+
+  .inbox {
+    background: #FFFFFF; border: 1px solid #DDE7F0; border-radius: 16px;
+    box-shadow: 0 1px 2px rgba(22,40,58,0.05), 0 16px 40px -24px rgba(22,40,58,0.22);
+    padding: 10px 14px;
+  }
+  .inbox .cap { font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: #5B7086; padding: 8px 6px 10px; }
+  .mail {
+    display: flex; align-items: baseline; gap: 12px;
+    padding: 12px 10px; border-top: 1px solid #EDF2F8;
+  }
+  .mail .from { width: 148px; flex-shrink: 0; font-size: 12px; color: #5B7086; }
+  .mail .subj { font-size: 14px; font-weight: 600; color: #16283A; }
+  .mail.junk .subj { font-weight: 400; color: #5B7086; }
+  .mail.hot { background: #FBF3E4; border-radius: 10px; border-top: none; margin-top: 4px; }
+  .mail.hot .subj { color: #16283A; }
+  .mail.hot .tag {
+    margin-left: auto; flex-shrink: 0; font-size: 10px; font-weight: 800; letter-spacing: 0.1em;
+    color: #B97F24; text-transform: uppercase;
+  }
+  .p1-note { font-size: 13px; line-height: 1.55; color: #5B7086; margin-top: 14px; max-width: 560px; }
+  .p1-note b { color: #16283A; }
+
+  .who { margin-top: 20px; }
+  .who .lbl { font-size: 11px; font-weight: 800; letter-spacing: 0.18em; color: #2578BF; text-transform: uppercase; }
+  .who p { font-size: 14.5px; line-height: 1.55; color: #16283A; margin: 8px 0 0; }
+  .who p b { font-weight: 700; }
+  .who p span { color: #5B7086; }
+
+  .stats { display: flex; gap: 36px; margin-top: auto; padding-top: 18px; }
+  .stat .n { font-size: 34px; font-weight: 900; letter-spacing: -0.02em; color: #2578BF; line-height: 1; }
+  .stat .l { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; color: #5B7086; text-transform: uppercase; margin-top: 6px; }
+
+  /* ── Page 2 ────────────────────────────────────────────────────────────── */
+  .p2-center { flex: 1; display: flex; flex-direction: column; justify-content: center; max-width: 1020px; }
+  .solution { font-size: 26px; line-height: 1.5; font-weight: 500; color: #16283A; margin: 26px 0 0; letter-spacing: -0.01em; }
+  .solution b { font-weight: 800; color: #2578BF; }
+  .chips { display: flex; gap: 14px; margin-top: 44px; flex-wrap: wrap; }
+  .chip {
+    display: flex; align-items: center; gap: 10px;
+    background: #FFFFFF; border: 1px solid #DDE7F0; border-radius: 999px;
+    padding: 12px 20px; font-size: 13px; color: #16283A; font-weight: 600;
+    box-shadow: 0 1px 2px rgba(22,40,58,0.04);
+  }
+  .chip svg { width: 16px; height: 16px; stroke: #2578BF; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+  .chip span { color: #5B7086; font-weight: 500; }
+
+  /* ── Page 3 ────────────────────────────────────────────────────────────── */
+  .flow { display: flex; align-items: stretch; gap: 0; margin-top: 40px; flex: 1; min-height: 0; }
+  .stage { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 14px; min-width: 0; }
+  .node {
+    background: #FFFFFF; border: 1.5px solid #DDE7F0; border-radius: 16px;
+    padding: 16px 18px;
+    box-shadow: 0 1px 2px rgba(22,40,58,0.05), 0 14px 32px -22px rgba(22,40,58,0.22);
+  }
+  .node .t { font-size: 15px; font-weight: 800; color: #16283A; display: flex; align-items: center; gap: 8px; }
+  .node .t svg { width: 16px; height: 16px; stroke: #2578BF; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+  .node .d { font-size: 12.5px; line-height: 1.5; color: #5B7086; margin-top: 6px; }
+  .node .d code { font-family: 'Inter', sans-serif; font-size: 11.5px; background: #E8F1FA; color: #1D5F94; border-radius: 5px; padding: 1.5px 6px; font-weight: 600; }
+  .node.core { border-color: #2578BF; background: #F3F9FD; }
+  .arrow { width: 52px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+  .arrow svg { width: 34px; height: 14px; stroke: #2578BF; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .stack-lbl { font-size: 10.5px; font-weight: 800; letter-spacing: 0.16em; color: #5B7086; text-transform: uppercase; text-align: center; }
+  .p3-tools { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 26px; }
+  .tool {
+    font-size: 12px; font-weight: 600; color: #1D5F94; background: #E8F1FA;
+    border-radius: 999px; padding: 8px 16px;
+  }
+
+  /* ── Page 4 ────────────────────────────────────────────────────────────── */
+  .shots { display: flex; gap: 22px; margin-top: 24px; height: 452px; min-height: 0; }
+  .shot-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .shot-main { width: 700px; }
+  .shot-side { flex: 1; }
+  .shot { position: relative; }
+  .frame {
+    background: #FFFFFF; border: 1px solid #DDE7F0; border-radius: 14px;
+    box-shadow: 0 1px 2px rgba(22,40,58,0.05), 0 16px 40px -24px rgba(22,40,58,0.25);
+    overflow: hidden; display: flex; align-items: stretch;
+  }
+  .frame img { width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block; }
+  .f-main { height: 404px; }
+  .f-side { height: 176px; }
+  .shot .cap { font-size: 11.5px; color: #5B7086; padding-top: 7px; line-height: 1.45; }
+  .shot .cap b { color: #16283A; font-weight: 700; }
+
+  /* ── Page 5 ────────────────────────────────────────────────────────────── */
+  .p5-grid { display: flex; gap: 44px; margin-top: 32px; flex: 1; min-height: 0; }
+  .p5-col { flex: 1; min-width: 0; }
+  .p5-lbl { font-size: 12px; font-weight: 800; letter-spacing: 0.2em; text-transform: uppercase; color: #2578BF; margin-bottom: 16px; }
+  .b-row { display: flex; gap: 14px; padding: 13px 0; border-top: 1px solid #E2EAF2; }
+  .b-row:first-of-type { border-top: none; padding-top: 4px; }
+  .b-dot { width: 8px; height: 8px; border-radius: 50%; background: #2578BF; margin-top: 7px; flex-shrink: 0; }
+  .b-dot.warm { background: #B97F24; }
+  .b-row h3 { font-size: 15px; font-weight: 700; color: #16283A; margin: 0; }
+  .b-row p { font-size: 13px; line-height: 1.55; color: #5B7086; margin: 4px 0 0; }
+  .cta {
+    margin-top: auto; background: #FFFFFF; border: 1px solid #DDE7F0; border-radius: 16px;
+    padding: 16px 22px; display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    box-shadow: 0 1px 2px rgba(22,40,58,0.05), 0 16px 40px -24px rgba(22,40,58,0.22);
+  }
+  .cta .txt { font-size: 15px; font-weight: 700; color: #16283A; }
+  .cta .txt span { color: #5B7086; font-weight: 500; }
+  .cta .url { font-size: 14px; font-weight: 800; color: #2578BF; white-space: nowrap; }
+</style>
+</head>
+<body>
+
+<!-- ═══ PAGE 1 · PROBLEM AND USER ═════════════════════════════════════════ -->
+<section class="page">
+  <div class="bg"></div>
+  <header class="hd">
+    <div class="brand">
+      <span class="mark"><svg viewBox="0 0 24 24"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg></span>
+      <span class="wordmark">Sync<b>Me</b></span>
+    </div>
+    <div class="kicker">01 · Problem and user</div>
+  </header>
+
+  <h1 class="headline">One inbox, four systems,<br><span class="hl">zero chance.</span></h1>
+
+  <div class="p1-grid">
+    <div class="p1-left">
+      <div class="who">
+        <div class="lbl">Who has the problem</div>
+        <p><b>Debrecen's international students.</b> <span>30,000+ students from 120+ countries, and every exam window, Moodle quiz, clinic visit and residence-permit step arrives as plain email, in a language they are still learning.</span></p>
+      </div>
+      <div class="stats">
+        <div class="stat"><div class="n">4</div><div class="l">systems emailing you</div></div>
+        <div class="stat"><div class="n">30</div><div class="l">days of backlog</div></div>
+        <div class="stat"><div class="n">1</div><div class="l">inbox, unsorted</div></div>
+      </div>
+    </div>
+    <div class="p1-right">
+      <div class="inbox">
+        <div class="cap">One real example — a Debrecen inbox we synced during the hackathon</div>
+        <div class="mail junk"><span class="from">classmate · unideb.hu</span><span class="subj">33</span></div>
+        <div class="mail junk"><span class="from">me (sent)</span><span class="subj">I sent a file to my friend</span></div>
+        <div class="mail junk"><span class="from">elearning</span><span class="subj">Early Bird final test (optional) megnyílik</span></div>
+        <div class="mail hot"><span class="from">Neptun · unideb.hu</span><span class="subj">Exam registration closes — MBVB13003</span><span class="tag">register by Fri 23:59</span></div>
+      </div>
+      <p class="p1-note"><b>The two emails that decide the semester are buried between chat and noise.</b> Miss the Neptun window and the exam is gone — no reminder ever comes.</p>
+    </div>
+  </div>
+
+  <footer class="foot">
+    <span>SyncMe · Smart Campus Hackathon · University of Debrecen</span>
+    <span class="no">01 / 05</span>
+  </footer>
+</section>
+
+<!-- ═══ PAGE 2 · SOLUTION ═════════════════════════════════════════════════ -->
+<section class="page">
+  <div class="bg"></div>
+  <header class="hd">
+    <div class="brand">
+      <span class="mark"><svg viewBox="0 0 24 24"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg></span>
+      <span class="wordmark">Sync<b>Me</b></span>
+    </div>
+    <div class="kicker">02 · Solution</div>
+  </header>
+
+  <div class="p2-center">
+    <h1 class="headline">What we built, <span class="hl">in two sentences.</span></h1>
+    <p class="solution"><b>SyncMe connects read-only Gmail and your Moodle calendar</b>, and an AI engine extracts every exam, quiz, clinic appointment and residence-permit deadline into one prioritized list — flagging the days when deadlines collide, before they burn you. <b>Everything unworthy never reaches the list:</b> newsletters, social notifications, personal chat — filtered at the query, the gate and the model.</p>
+    <div class="chips">
+      <div class="chip">
+        <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        gmail.readonly <span>— can't send, can't delete</span>
+      </div>
+      <div class="chip">
+        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        Moodle .ics <span>— pasted once, stays in your browser</span>
+      </div>
+      <div class="chip">
+        <svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+        Zero storage <span>— fetched live, never saved on servers</span>
+      </div>
+    </div>
+  </div>
+
+  <footer class="foot">
+    <span>SyncMe · Smart Campus Hackathon · University of Debrecen</span>
+    <span class="no">02 / 05</span>
+  </footer>
+</section>
+
+<!-- ═══ PAGE 3 · HOW IT WORKS ═════════════════════════════════════════════ -->
+<section class="page">
+  <div class="bg"></div>
+  <header class="hd">
+    <div class="brand">
+      <span class="mark"><svg viewBox="0 0 24 24"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg></span>
+      <span class="wordmark">Sync<b>Me</b></span>
+    </div>
+    <div class="kicker">03 · How it works</div>
+  </header>
+
+  <h1 class="headline">Four moving parts, <span class="hl">one calm list.</span></h1>
+
+  <div class="flow">
+    <div class="stage">
+      <div class="stack-lbl">Sources</div>
+      <div class="node">
+        <div class="t"><svg viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>Gmail</div>
+        <div class="d">last 30 days, <code>gmail.readonly</code></div>
+      </div>
+      <div class="node">
+        <div class="t"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Moodle</div>
+        <div class="d">private <code>.ics</code> calendar feed</div>
+      </div>
+    </div>
+    <div class="arrow"><svg viewBox="0 0 34 14"><line x1="0" y1="7" x2="26" y2="7"/><polyline points="20,1 27,7 20,13"/></svg></div>
+    <div class="stage">
+      <div class="stack-lbl">Filter</div>
+      <div class="node">
+        <div class="t"><svg viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>Relevance gate</div>
+        <div class="d">drops promotions, social notifications and personal chat ("33", file shares) before the AI ever runs</div>
+      </div>
+    </div>
+    <div class="arrow"><svg viewBox="0 0 34 14"><line x1="0" y1="7" x2="26" y2="7"/><polyline points="20,1 27,7 20,13"/></svg></div>
+    <div class="stage">
+      <div class="stack-lbl">Brains</div>
+      <div class="node core">
+        <div class="t"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>AI extraction</div>
+        <div class="d"><code>Gemini 2.5 Flash</code> primary · GLM fallback · rule engine — strict JSON, never throws</div>
+      </div>
+    </div>
+    <div class="arrow"><svg viewBox="0 0 34 14"><line x1="0" y1="7" x2="26" y2="7"/><polyline points="20,1 27,7 20,13"/></svg></div>
+    <div class="stage">
+      <div class="stack-lbl">Output</div>
+      <div class="node">
+        <div class="t"><svg viewBox="0 0 24 24"><path d="M3 3h18v18H3z" opacity="0"/><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg>Dashboard</div>
+        <div class="d">priority list · conflict radar · mark-as-done that syncs skip forever — <code>Next.js</code> on <code>Vercel</code></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="p3-tools">
+    <span class="tool">Gmail API</span>
+    <span class="tool">Moodle .ics</span>
+    <span class="tool">Google Gemini</span>
+    <span class="tool">GLM fallback</span>
+    <span class="tool">Next.js 16</span>
+    <span class="tool">Vercel</span>
+  </div>
+
+  <footer class="foot">
+    <span>SyncMe · Smart Campus Hackathon · University of Debrecen</span>
+    <span class="no">03 / 05</span>
+  </footer>
+</section>
+
+<!-- ═══ PAGE 4 · SCREENSHOTS ══════════════════════════════════════════════ -->
+<section class="page">
+  <div class="bg"></div>
+  <header class="hd">
+    <div class="brand">
+      <span class="mark"><svg viewBox="0 0 24 24"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg></span>
+      <span class="wordmark">Sync<b>Me</b></span>
+    </div>
+    <div class="kicker">04 · Screenshots</div>
+  </header>
+
+  <h1 class="headline">It's built. It runs. <span class="hl">Live today.</span></h1>
+
+  <div class="shots">
+    <div class="shot-col shot-main">
+      <div class="shot">
+        <div class="frame f-main"><img src="images/shot-dashboard.png" alt="SyncMe dashboard — priority list with conflict radar"></div>
+        <p class="cap"><b>Dashboard —</b> AI-extracted tasks as one priority list; the radar flags days when deadlines collide.</p>
+      </div>
+    </div>
+    <div class="shot-col shot-side">
+      <div class="shot">
+        <div class="frame f-side"><img src="images/shot-landing.png" alt="SyncMe landing page — Google sign-in"></div>
+        <p class="cap"><b>Sign in with Google —</b> read-only access, one click, live sync every 30 seconds.</p>
+      </div>
+      <div class="shot">
+        <div class="frame f-side"><img src="images/shot-mobile.png" alt="SyncMe mobile dashboard"></div>
+        <p class="cap"><b>Mobile-first —</b> the same calm list, in the pocket between lectures.</p>
+      </div>
+    </div>
+  </div>
+
+  <footer class="foot">
+    <span>SyncMe · Smart Campus Hackathon · University of Debrecen</span>
+    <span class="no">04 / 05</span>
+  </footer>
+</section>
+
+<!-- ═══ PAGE 5 · IMPACT AND NEXT STEPS ════════════════════════════════════ -->
+<section class="page">
+  <div class="bg"></div>
+  <header class="hd">
+    <div class="brand">
+      <span class="mark"><svg viewBox="0 0 24 24"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg></span>
+      <span class="wordmark">Sync<b>Me</b></span>
+    </div>
+    <div class="kicker">05 · Impact and next steps</div>
+  </header>
+
+  <h1 class="headline">No more missed deadlines — <span class="hl">for students who arrived alone.</span></h1>
+
+  <div class="p5-grid">
+    <div class="p5-col">
+      <div class="p5-lbl">Who benefits</div>
+      <div class="b-row">
+        <span class="b-dot warm"></span>
+        <div>
+          <h3>International students</h3>
+          <p>Residence permits, clinic visits and exam windows — in a second language, inside an admin system they've known for weeks. SyncMe reads it so they don't misread it.</p>
+        </div>
+      </div>
+      <div class="b-row">
+        <span class="b-dot"></span>
+        <div>
+          <h3>Every Debrecen student</h3>
+          <p>Neptun registration windows and Moodle quizzes stop colliding silently — the radar surfaces the collision days in advance.</p>
+        </div>
+      </div>
+      <div class="b-row">
+        <span class="b-dot"></span>
+        <div>
+          <h3>The university</h3>
+          <p>Fewer panicked support emails, fewer lost semesters, and a template any campus can adopt.</p>
+        </div>
+      </div>
+    </div>
+    <div class="p5-col">
+      <div class="p5-lbl">What comes next</div>
+      <div class="b-row">
+        <span class="b-dot"></span>
+        <div>
+          <h3>Deadline reminders</h3>
+          <p>We already hold the date and the priority — push notifications 48 hours ahead are one integration away.</p>
+        </div>
+      </div>
+      <div class="b-row">
+        <span class="b-dot"></span>
+        <div>
+          <h3>Any campus, any Gmail</h3>
+          <p>SyncMe is config-only: point it at another university's domain and it works — no code changes.</p>
+        </div>
+      </div>
+      <div class="b-row">
+        <span class="b-dot"></span>
+        <div>
+          <h3>Hungarian &amp; English</h3>
+          <p>Full bilingual interface and one-tap deep links into Neptun and Moodle tasks.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cta">
+    <div class="txt">Try the live demo — open the dashboard and hit <span>“Sync Gmail Now.”</span></div>
+    <div class="url">syncme-rust.vercel.app</div>
+  </div>
+
+  <footer class="foot">
+    <span>SyncMe · Smart Campus Hackathon · University of Debrecen</span>
+    <span class="no">05 / 05</span>
+  </footer>
+</section>
+
+</body>
+</html>
