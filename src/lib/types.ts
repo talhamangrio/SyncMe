@@ -1,128 +1,95 @@
-// ─── UniPulse AI — Shared Types ─────────────────────────────────────────────
+// ─── SyncMe — Shared Types ──────────────────────────────────────────────────
 
-export type AgentSource = "Neptun" | "Moodle" | "Immigration" | "Medical" | "Professor";
+export type TaskCategory = "Neptun" | "Moodle" | "Medical" | "Immigration";
+export type TaskPriority = "High" | "Medium" | "Low";
 
-export type AgentCategory = "Exam" | "Quiz" | "Appointment" | "Admin" | "Reply Required";
-
-/** Structured output produced by the 3-step Z.ai GLM agent pipeline. */
-export interface AgentExtraction {
-  is_actionable: boolean;
+/** Structured task extracted from an email or calendar feed. */
+export interface SyncTask {
+  id: string;
   title: string;
-  source: AgentSource;
-  category: AgentCategory;
-  event_datetime: string | null;
-  is_fixed_event: boolean;
-  urgency_score: number; // 1..10
-  requires_reply: boolean;
-  suggested_reply: string | null;
-  prep_hours: number;
-  reasoning: string;
+  category: TaskCategory;
+  /** ISO-8601 datetime, or the literal string "unknown" when no date is detectable. */
+  dueDate: string;
+  priority: TaskPriority;
+  actionSummary: string;
+  sourceEmailSubject: string;
 }
 
-export interface AdjustmentNotice {
-  summary: string;
-  detail: string;
+/** Raw email metadata shown in the "Raw Emails" drawer (never persisted). */
+export interface RawEmail {
+  id: string;
+  subject: string;
+  from: string;
+  date: string; // ISO-8601
+  snippet: string;
 }
 
-export interface SyncChannelResult {
-  checked: boolean;
-  newItems: number;
-  processed: string[];
-  discarded: string[];
+export interface SyncMeUser {
+  name: string;
+  email: string;
+  picture: string;
+}
+
+export interface GmailSyncResponse {
+  ok: boolean;
+  tasks: SyncTask[];
+  emails: RawEmail[];
+  /** "ai" = GLM extraction, "heuristic" = deterministic fallback engine. */
+  aiStatus: "ai" | "heuristic";
   error?: string;
 }
 
-export interface DashboardTask {
-  id: string;
-  source: AgentSource;
-  category: AgentCategory;
-  title: string;
-  eventDatetime: string | null;
-  isFixedEvent: boolean;
-  urgencyScore: number;
-  requiresReply: boolean;
-  suggestedReply: string | null;
-  prepHours: number;
-  rawSubject: string | null;
-  status: string;
-  aiProcessed: boolean;
-  createdAt: string;
+export interface MoodleSyncResponse {
+  ok: boolean;
+  tasks: SyncTask[];
+  error?: string;
 }
 
-export interface DashboardBlock {
-  id: string;
-  taskId: string | null;
-  type: "fixed" | "prep";
-  title: string;
-  start: string;
-  end: string;
-  locked: boolean;
-  priority: number;
-  autoAdjusted: boolean;
-}
+export const TASK_CATEGORIES: TaskCategory[] = ["Neptun", "Moodle", "Medical", "Immigration"];
 
-export interface DashboardAdjustment {
-  id: string;
-  summary: string;
-  detail: string;
-  createdAt: string;
-}
-
-export interface DashboardData {
-  config: {
-    studentName: string;
-    googleConfigured: boolean;
-    gmailConnected: boolean;
-    moodleConnected: boolean;
-    moodleIcsUrl: string | null;
-    lastSyncAt: string | null;
-  };
-  tasks: DashboardTask[];
-  blocks: DashboardBlock[];
-  adjustments: DashboardAdjustment[];
-}
-
-export const DAY_START_HOUR = 8;
-export const DAY_END_HOUR = 22;
-export const HOUR_PX = 60;
-
-export const SOURCE_COLORS: Record<AgentSource, { text: string; border: string; bg: string; dot: string }> = {
-  Neptun: { text: "text-amber-300", border: "border-amber-400/50", bg: "bg-amber-400/10", dot: "bg-amber-400" },
-  Moodle: { text: "text-orange-300", border: "border-orange-400/50", bg: "bg-orange-400/10", dot: "bg-orange-400" },
-  Immigration: { text: "text-red-300", border: "border-red-400/50", bg: "bg-red-400/10", dot: "bg-red-400" },
-  Medical: { text: "text-emerald-300", border: "border-emerald-400/50", bg: "bg-emerald-400/10", dot: "bg-emerald-400" },
-  Professor: { text: "text-fuchsia-300", border: "border-fuchsia-400/50", bg: "bg-fuchsia-400/10", dot: "bg-fuchsia-400" },
+export const CATEGORY_STYLES: Record<TaskCategory, { badge: string; dot: string }> = {
+  Neptun: { badge: "border-amber-400/40 bg-amber-400/10 text-amber-300", dot: "bg-amber-400" },
+  Moodle: { badge: "border-emerald-400/40 bg-emerald-400/10 text-emerald-300", dot: "bg-emerald-400" },
+  Medical: { badge: "border-rose-400/40 bg-rose-400/10 text-rose-300", dot: "bg-rose-400" },
+  Immigration: { badge: "border-orange-400/40 bg-orange-400/10 text-orange-300", dot: "bg-orange-400" },
 };
 
-export function clampUrgency(n: unknown): number {
-  const v = typeof n === "number" ? n : parseInt(String(n ?? 5), 10);
-  if (Number.isNaN(v)) return 5;
-  return Math.min(10, Math.max(1, Math.round(v)));
-}
+export const PRIORITY_STYLES: Record<TaskPriority, string> = {
+  High: "border-rose-400/40 bg-rose-400/10 text-rose-300",
+  Medium: "border-amber-400/40 bg-amber-400/10 text-amber-300",
+  Low: "border-emerald-400/40 bg-emerald-400/10 text-emerald-300",
+};
 
-export function parseExtraction(json: unknown): AgentExtraction | null {
-  if (!json || typeof json !== "object") return null;
-  const e = json as Record<string, unknown>;
-  const sources: AgentSource[] = ["Neptun", "Moodle", "Immigration", "Medical", "Professor"];
-  const categories: AgentCategory[] = ["Exam", "Quiz", "Appointment", "Admin", "Reply Required"];
-  const source = sources.includes(e.source as AgentSource) ? (e.source as AgentSource) : null;
-  const category = categories.includes(e.category as AgentCategory) ? (e.category as AgentCategory) : null;
-  let datetime: string | null = null;
-  if (typeof e.event_datetime === "string" && e.event_datetime.length > 0) {
-    const d = new Date(e.event_datetime);
-    if (!Number.isNaN(d.getTime())) datetime = d.toISOString();
+/** Normalize/validate one raw task object coming from the AI or heuristics. */
+export function sanitizeTask(raw: unknown, fallbackId: string): SyncTask | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const title = typeof r.title === "string" && r.title.trim() ? r.title.trim().slice(0, 160) : "";
+  if (!title) return null;
+
+  const category = TASK_CATEGORIES.includes(r.category as TaskCategory) ? (r.category as TaskCategory) : "Neptun";
+  const priorities: TaskPriority[] = ["High", "Medium", "Low"];
+  const priority = priorities.includes(r.priority as TaskPriority) ? (r.priority as TaskPriority) : "Medium";
+
+  let dueDate = "unknown";
+  if (typeof r.dueDate === "string" && r.dueDate.trim() && r.dueDate.trim().toLowerCase() !== "unknown") {
+    const d = new Date(r.dueDate);
+    if (!Number.isNaN(d.getTime())) dueDate = d.toISOString();
   }
+
   return {
-    is_actionable: Boolean(e.is_actionable),
-    title: typeof e.title === "string" && e.title.trim() ? e.title.trim().slice(0, 140) : "Untitled item",
-    source: (source ?? "Professor") as AgentSource,
-    category: (category ?? "Admin") as AgentCategory,
-    event_datetime: datetime,
-    is_fixed_event: Boolean(e.is_fixed_event),
-    urgency_score: clampUrgency(e.urgency_score),
-    requires_reply: Boolean(e.requires_reply),
-    suggested_reply: typeof e.suggested_reply === "string" && e.suggested_reply.trim() ? e.suggested_reply.trim() : null,
-    prep_hours: typeof e.prep_hours === "number" && e.prep_hours > 0 ? Math.min(12, e.prep_hours) : 0,
-    reasoning: typeof e.reasoning === "string" ? e.reasoning.slice(0, 500) : "",
+    id: typeof r.id === "string" && r.id.trim() ? r.id.trim() : fallbackId,
+    title,
+    category,
+    dueDate,
+    priority,
+    actionSummary:
+      typeof r.actionSummary === "string" && r.actionSummary.trim()
+        ? r.actionSummary.trim().slice(0, 220)
+        : "Review this email and take the required action.",
+    sourceEmailSubject:
+      typeof r.sourceEmailSubject === "string" && r.sourceEmailSubject.trim()
+        ? r.sourceEmailSubject.trim().slice(0, 200)
+        : title,
   };
 }

@@ -1,19 +1,18 @@
-import { NextResponse } from "next/server";
-import { appBaseUrl, buildGoogleAuthUrl, googleOAuthConfigured } from "@/lib/gmail";
+import { NextResponse, type NextRequest } from "next/server";
+import { buildGoogleAuthUrl, googleOAuthConfigured, resolveOrigin } from "@/lib/gmail";
 
 export const dynamic = "force-dynamic";
 
-/** Starts the Google OAuth 2.0 consent flow (gmail.readonly, Testing mode). */
-export async function GET(req: Request) {
+/**
+ * GET /api/auth/google — starts the Google OAuth 2.0 consent flow with
+ * openid email profile + gmail.readonly, redirecting back to
+ * ${origin}/api/auth/callback.
+ */
+export async function GET(req: NextRequest) {
+  const origin = resolveOrigin(req);
   if (!googleOAuthConfigured()) {
-    const redirectUri = `${appBaseUrl(req)}/api/auth/callback`;
-    return NextResponse.json({
-      configured: false,
-      message:
-        "Google OAuth is not configured yet. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to .env.local, then restart the server. Paste this exact Redirect URI in Google Cloud Console:",
-      redirectUri,
-    });
+    return NextResponse.redirect(`${origin}/?auth_error=not_configured`);
   }
-  const redirectUri = `${appBaseUrl(req)}/api/auth/callback`;
+  const redirectUri = `${origin}/api/auth/callback`;
   return NextResponse.redirect(buildGoogleAuthUrl(redirectUri));
 }

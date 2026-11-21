@@ -14,12 +14,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "UniPulse AI — University of Debrecen Edition",
+  title: "SyncMe — Your Student Chief of Staff",
   description:
-    "Autonomous, real-time Student Chief of Staff: Gmail + Moodle ingestion, Z.ai GLM agent triage, and self-adjusting smart timetables for University of Debrecen students.",
-  keywords: ["UniPulse AI", "University of Debrecen", "Neptun", "Moodle", "autonomous agent", "Z.ai GLM"],
+    "SyncMe reads your Gmail and Moodle calendar, extracts every exam, quiz, appointment and deadline, and tells you exactly what to do next. Built for University of Debrecen students.",
+  keywords: ["SyncMe", "University of Debrecen", "Neptun", "Moodle", "Gmail", "AI task extraction", "student deadlines"],
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: "/logo.svg",
   },
 };
 

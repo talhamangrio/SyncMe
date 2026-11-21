@@ -60,3 +60,5 @@ server.log
 # SQLite database artifacts
 /db/*.db
 /db/*.db-journal
+# sandbox infra
+Caddyfile

@@ -1,78 +1,80 @@
-# UniPulse AI — University of Debrecen Edition
+# SyncMe — Your Student Chief of Staff
 
-Autonomous, real-time **Student Chief of Staff** for University of Debrecen students. Students never type a task manually: emails and calendar events are ingested automatically, triaged by a Z.ai GLM agent, and turned into a self-adjusting smart timetable.
+**SyncMe** reads your Gmail and Moodle calendar, extracts every exam, quiz, appointment and deadline, and tells you exactly what to do next — sorted, prioritized and conflict-checked. Built for University of Debrecen students.
 
-![Stack](https://img.shields.io/badge/Next.js%2016-App%20Router-black) ![AI](https://img.shields.io/badge/Z.ai-GLM%20Agent-FFC93C) ![DB](https://img.shields.io/badge/Prisma-SQLite-2B2D31)
+![Stack](https://img.shields.io/badge/Next.js%2016-App%20Router-black) ![AI](https://img.shields.io/badge/Z.ai-glm--4.7--flash-FFC93C) ![Auth](https://img.shields.io/badge/Google_OAuth-gmail.readonly-4285F4)
 
 ## How it works
 
 ```
-Gmail (Neptun / Immigration / Clinics / Professors)  ─┐
-                                                      ├─► Dedup Gate ─► Z.ai GLM Agent ─► Smart Timetable
-Moodle elearning.unideb.hu (.ics export feed)        ─┘   (source_id)    • Triage & noise filter
-                                                                          • Structured extraction & risk score
-Live Demo Injector (hackathon mode)                  ─┘                   • Autonomous timetable & conflict solver
+Gmail (Neptun / Klinika / Immigration / Professors) ──►  GET /api/gmail/sync ──┐
+Moodle elearning.unideb.hu (.ics private feed)      ──►  POST /api/moodle/sync ─┼─► Z.ai GLM ─► Dashboard
+Demo Sandbox (one click, zero credentials)          ──►  GET  /api/demo/enter ──┘
 ```
 
-### The 3-step agentic pipeline
-1. **Triage & noise filter** — newsletters, promos and spam are discarded automatically (`is_actionable`).
-2. **Structured extraction & risk scoring** — clean title, source (`Neptun / Moodle / Immigration / Medical / Professor`), category, ISO datetime, fixed-vs-flexible, urgency 1–10, and a ready-to-send confirmation reply when the sender expects one.
-3. **Autonomous timetable & conflict solver** — fixed exams/appointments are locked onto the board; exams *and* flexible deadlines get AI Prep blocks slotted into conflict-free gaps (08:00–22:00 study window, overnight barriers); urgent arrivals **auto-shift** colliding prep blocks and raise a yellow "Schedule Auto-Adjusted" notice.
-
-## Features
-
-- **Zero-click ingestion** — Gmail via OAuth 2.0 (`gmail.readonly`), Moodle via private `.ics` export URL, 20-second background sync loop with pulsing status pills.
-- **Live Demo Injector** — five one-click scenarios (Neptun exam, immigration appointment requiring reply, Moodle quiz, professor email, newsletter spam) that run the *real* pipeline with dynamically generated dates. Works with zero credentials configured.
-- **Executive dark dashboard** — Matte Charcoal `#1E2024` / Dark Slate `#2B2D31` / Crisp Silver `#D9DADC` / Signal Yellow `#FFC93C`; Daily + Weekly timeline (08:00–22:00) with locked commitments (solid border, lock icon) vs AI-Scheduled Prep (dashed yellow, sparkle icon), live now-line and collision columns.
-- **source_id deduplication** — an email or calendar event is never processed twice.
-- **Bulletproof fallback** — if GLM is unreachable, a deterministic rule engine keeps triage/scheduling alive.
-
-## Tech stack
-
-Next.js 16 (App Router, Route Handlers) · TypeScript · Tailwind CSS 4 · shadcn/ui · Prisma + SQLite · Z.ai GLM (`z-ai-web-dev-sdk`) · Framer Motion · sonner
+- **Read-only Gmail access** (`gmail.readonly`) — the last 30 days of university email are scanned, never stored.
+- **Z.ai GLM extraction** (`glm-4.7-flash`) — emails + current ISO date/time in, strict JSON tasks out (`{ title, category: Neptun|Moodle|Medical|Immigration, dueDate, priority, actionSummary, sourceEmailSubject }`).
+- **Conflict radar** — days holding 2+ deadlines raise yellow collision alerts.
+- **Demo Sandbox** — a simulated Debrecen inbox with dynamically generated dates, so demos work on any day without credentials.
+- **Zero storage** — no database: tokens live in a short-lived httpOnly cookie (~1h), emails are processed transiently in memory and discarded.
 
 ## Quick start
 
 ```bash
 bun install
-cp .env.example .env.local   # optional — demo mode works without keys
-bun run db:push
+cp .env.example .env.local   # then paste your real keys
 bun run dev                  # http://localhost:3000
 ```
 
-The dashboard seeds a realistic sample week on first load. Use the **Live Demo Injector** (footer bar) to fire live events through the GLM pipeline, and **Connect Accounts** to activate real Gmail/Moodle sync.
+### Environment variables (`.env.local`)
 
-## Connecting real data (Testing mode, $0 cost)
+| Variable | Where to get it |
+| --- | --- |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google Cloud Console → OAuth client ID (Web application) |
+| `ZAI_API_KEY` | [z.ai](https://z.ai) → API Keys |
+| `NEXT_PUBLIC_APP_URL` | `http://localhost:3000` locally, `https://syncme.vercel.app` in production |
 
-1. **Gmail Gate** — see `.env.example`: enable the Gmail API in Google Cloud Console, create a Web-application OAuth client with redirect URI `<your-app-url>/api/auth/callback`, paste `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` into `.env.local`, restart, then click *Connect Accounts → Connect Google Account*.
-2. **Moodle** — `elearning.unideb.hu` → Preferences → Calendar → Export calendar → *All events* → copy the generated private URL → paste it in *Connect Accounts → Moodle*.
-3. **Z.ai** — bundled in the Z.ai runtime; self-hosters set `ZAI_API_KEY`.
+### Google Cloud Console setup ($0, Testing mode)
+
+1. [console.cloud.google.com](https://console.cloud.google.com) → create/select a project.
+2. **APIs & Services → Library** → enable **Gmail API**.
+3. **APIs & Services → OAuth consent screen** → External → add your Gmail as a **Test user**.
+4. **Credentials → Create Credentials → OAuth client ID** → Web application → Authorized redirect URIs:
+   - `http://localhost:3000/api/auth/callback`
+   - `https://<your-deployment>/api/auth/callback`
+
+## Connecting real data
+
+1. **Gmail** — click *Sign in with Google* on the landing page and grant read-only access.
+2. **Moodle** — on `elearning.unideb.hu`: Calendar → Export → **Private address (.ics)** → paste it into *Connect Moodle .ics* on the dashboard (stored only in your browser).
+3. **Demo** — no credentials needed: click *Try Demo Sandbox*.
 
 ## API surface
 
 | Route | Method | Purpose |
 | --- | --- | --- |
-| `/api/events` | GET | Dashboard payload (tasks, blocks, adjustments, config) + first-run seed |
-| `/api/sync` | POST | Background sync loop: Gmail + Moodle → agent pipeline |
-| `/api/agent/process` | POST | Push any subject/body through the GLM pipeline |
-| `/api/demo/simulate` | POST | Live Demo Injector scenarios |
-| `/api/demo/clear` | POST | Reset workspace (optional `reseed`) |
-| `/api/connect/moodle` | POST/DELETE | Save/test/disconnect the `.ics` feed |
-| `/api/auth/google` + `/api/auth/callback` | GET | OAuth 2.0 consent + token storage |
-| `/api/config` | GET/PUT | Student config |
-| `/api/tasks/[id]` | PATCH/DELETE | Done / dismiss / restore |
-| `/api/adjustments` | POST | Acknowledge auto-adjust notices |
+| `/api/auth/google` | GET | Start Google OAuth (openid email profile + gmail.readonly) |
+| `/api/auth/callback` | GET | Exchange code → httpOnly cookie (`gmail_access_token`, maxAge 3500) + profile session cookie → `/dashboard` |
+| `/api/auth/logout` | POST | Clear SyncMe cookies, return to `/` |
+| `/api/gmail/sync` | GET | Gmail (last 30d, max 12) → Z.ai `glm-4.7-flash` strict-JSON extraction |
+| `/api/moodle/sync` | POST | `{ icsUrl }` → server-side fetch + VEVENT parse → normalized tasks |
+| `/api/demo/enter` | GET | Set demo cookie → `/dashboard` (simulated inbox) |
 
-## Project layout
+## Deploy to Vercel
 
-```
-src/
-├── app/                    # Dashboard page + /api route handlers
-├── components/dashboard/   # Header, ActionQueue, Timetable, DemoDrawer, ConnectAccountsModal
-├── hooks/useDashboard.ts   # Client state + 20s polling loop
-└── lib/                    # agent.ts (GLM pipeline), scheduler.ts (conflict solver),
-                             # ics.ts, gmail.ts, pipeline.ts, demo.ts, seed.ts, types.ts
-prisma/schema.prisma        # UserConfig, RawFeedItem, Task, ScheduledBlock, ScheduleAdjustment
-```
+1. Push this repo to GitHub and import it in Vercel.
+2. Add the same four environment variables in **Settings → Environment Variables** (set `NEXT_PUBLIC_APP_URL=https://syncme.vercel.app`).
+3. Add `https://syncme.vercel.app/api/auth/callback` to the Authorized redirect URIs in Google Cloud Console.
+4. Deploy.
 
-> Built for the University of Debrecen student community. Not affiliated with the University of Debrecen.
+## Tech stack
+
+Next.js 16 (App Router) · TypeScript · Tailwind CSS 4 · shadcn/ui · Z.ai GLM · Framer Motion · sonner · date-fns
+
+## Security notes
+
+- `.env.local` is git-ignored; `.env.example` documents the required keys.
+- Rotate your Google Client Secret and Z.ai API key after any public exposure (screenshots, chats).
+- Revoke access anytime at [myaccount.google.com/permissions](https://myaccount.google.com/permissions) or via the dashboard Logout button.
+
+> Student-built for the University of Debrecen community. Not affiliated with the University of Debrecen.

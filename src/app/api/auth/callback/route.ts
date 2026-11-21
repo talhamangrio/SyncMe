@@ -1,58 +1,49 @@
-import { db } from "@/lib/db";
-import { appBaseUrl, exchangeGoogleCode, googleOAuthConfigured } from "@/lib/gmail";
+import { NextResponse, type NextRequest } from "next/server";
+import { exchangeGoogleCode, fetchGoogleProfile, googleOAuthConfigured, resolveOrigin } from "@/lib/gmail";
 
 export const dynamic = "force-dynamic";
 
-/** Google OAuth 2.0 callback: exchanges the code, stores tokens, returns home. */
-export async function GET(req: Request) {
-  const url = new URL(req.url);
-  const code = url.searchParams.get("code");
-  const error = url.searchParams.get("error");
+/**
+ * GET /api/auth/callback — exchanges the authorization code with Google,
+ * stores gmail_access_token in a short-lived httpOnly cookie (maxAge 3500)
+ * plus the student's profile in a session cookie, then redirects to /dashboard.
+ */
+export async function GET(req: NextRequest) {
+  const origin = resolveOrigin(req);
+  const failTo = (reason: string) =>
+    NextResponse.redirect(`${origin}/?auth_error=${encodeURIComponent(reason)}`);
 
-  if (error) return Response.redirect(`${appBaseUrl(req)}/?google_error=${encodeURIComponent(error)}`, 302);
-  if (!code) return Response.redirect(`${appBaseUrl(req)}/?google_error=missing_code`, 302);
-  if (!googleOAuthConfigured()) return Response.redirect(`${appBaseUrl(req)}/?google_error=not_configured`, 302);
+  const oauthError = req.nextUrl.searchParams.get("error");
+  if (oauthError) return failTo(oauthError);
+
+  const code = req.nextUrl.searchParams.get("code");
+  if (!code) return failTo("missing_code");
+  if (!googleOAuthConfigured()) return failTo("not_configured");
 
   try {
-    const redirectUri = `${appBaseUrl(req)}/api/auth/callback`;
+    // The redirect URI must be byte-identical to the one used in /api/auth/google.
+    const redirectUri = `${origin}/api/auth/callback`;
     const tokens = await exchangeGoogleCode(code, redirectUri);
+    const profile = await fetchGoogleProfile(tokens.access_token);
 
-    // Identify the student (optional enrichment)
-    let email: string | undefined;
-    try {
-      const uiRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
-        headers: { Authorization: `Bearer ${tokens.access_token}` },
-      });
-      if (uiRes.ok) {
-        const ui = (await uiRes.json()) as { email?: string };
-        email = ui.email;
-      }
-    } catch {
-      // userinfo is optional
-    }
-
-    await db.userConfig.upsert({
-      where: { id: "singleton" },
-      create: {
-        id: "singleton",
-        googleAccessToken: tokens.access_token,
-        googleRefreshToken: tokens.refresh_token ?? null,
-        googleTokenExpiry: new Date(Date.now() + (tokens.expires_in ?? 3600) * 1000),
-        gmailConnected: true,
-        studentName: email ?? "Student",
-      },
-      update: {
-        googleAccessToken: tokens.access_token,
-        ...(tokens.refresh_token ? { googleRefreshToken: tokens.refresh_token } : {}),
-        googleTokenExpiry: new Date(Date.now() + (tokens.expires_in ?? 3600) * 1000),
-        gmailConnected: true,
-        ...(email ? { studentName: email } : {}),
-      },
+    const res = NextResponse.redirect(`${origin}/dashboard`);
+    const secure = origin.startsWith("https://");
+    res.cookies.set("gmail_access_token", tokens.access_token, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure,
+      path: "/",
+      maxAge: 3500,
     });
-
-    return Response.redirect(`${appBaseUrl(req)}/?connected=gmail`, 302);
+    res.cookies.set("syncme_user", encodeURIComponent(JSON.stringify(profile)), {
+      httpOnly: false,
+      sameSite: "lax",
+      secure,
+      path: "/",
+    });
+    return res;
   } catch (err) {
-    console.error("[UniPulse OAuth] callback failed:", err);
-    return Response.redirect(`${appBaseUrl(req)}/?google_error=exchange_failed`, 302);
+    console.error("[SyncMe OAuth] callback failed:", err);
+    return failTo("token_exchange_failed");
   }
 }

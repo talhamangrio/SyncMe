@@ -44,77 +44,77 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* ─── UniPulse AI — dark editorial palette ──────────────────────────────────
-   Matte Charcoal #1E2024 · Dark Slate #2B2D31 · Crisp Silver #D9DADC
+/* ─── SyncMe — dark editorial palette ───────────────────────────────────────
+   Deep Charcoal #18191C · Card Slate #232529 · Crisp Silver #E4E5E7
    Signal Yellow #FFC93C                                                     */
 :root {
   --radius: 0.625rem;
-  --background: #1e2024;
-  --foreground: #d9dadc;
-  --card: #2b2d31;
-  --card-foreground: #d9dadc;
+  --background: #18191c;
+  --foreground: #e4e5e7;
+  --card: #232529;
+  --card-foreground: #e4e5e7;
   --popover: #26282c;
-  --popover-foreground: #d9dadc;
+  --popover-foreground: #e4e5e7;
   --primary: #ffc93c;
-  --primary-foreground: #1e2024;
-  --secondary: #34373d;
-  --secondary-foreground: #d9dadc;
-  --muted: #2f3236;
-  --muted-foreground: #9a9ea6;
-  --accent: #34373d;
+  --primary-foreground: #18191c;
+  --secondary: #2e3035;
+  --secondary-foreground: #e4e5e7;
+  --muted: #26282c;
+  --muted-foreground: #9a9ca1;
+  --accent: #2e3035;
   --accent-foreground: #ffc93c;
   --destructive: #e5484d;
   --destructive-foreground: #ffffff;
-  --border: #3a3d42;
-  --input: #3a3d42;
+  --border: #34363b;
+  --input: #34363b;
   --ring: #ffc93c;
   --chart-1: #ffc93c;
   --chart-2: #e5484d;
   --chart-3: #34d27b;
-  --chart-4: #d9dadc;
-  --chart-5: #9a9ea6;
-  --sidebar: #2b2d31;
-  --sidebar-foreground: #d9dadc;
+  --chart-4: #e4e5e7;
+  --chart-5: #9a9ca1;
+  --sidebar: #232529;
+  --sidebar-foreground: #e4e5e7;
   --sidebar-primary: #ffc93c;
-  --sidebar-primary-foreground: #1e2024;
-  --sidebar-accent: #34373d;
-  --sidebar-accent-foreground: #d9dadc;
-  --sidebar-border: #3a3d42;
+  --sidebar-primary-foreground: #18191c;
+  --sidebar-accent: #2e3035;
+  --sidebar-accent-foreground: #e4e5e7;
+  --sidebar-border: #34363b;
   --sidebar-ring: #ffc93c;
 }
 
 .dark {
-  --background: #1e2024;
-  --foreground: #d9dadc;
-  --card: #2b2d31;
-  --card-foreground: #d9dadc;
+  --background: #18191c;
+  --foreground: #e4e5e7;
+  --card: #232529;
+  --card-foreground: #e4e5e7;
   --popover: #26282c;
-  --popover-foreground: #d9dadc;
+  --popover-foreground: #e4e5e7;
   --primary: #ffc93c;
-  --primary-foreground: #1e2024;
-  --secondary: #34373d;
-  --secondary-foreground: #d9dadc;
-  --muted: #2f3236;
-  --muted-foreground: #9a9ea6;
-  --accent: #34373d;
+  --primary-foreground: #18191c;
+  --secondary: #2e3035;
+  --secondary-foreground: #e4e5e7;
+  --muted: #26282c;
+  --muted-foreground: #9a9ca1;
+  --accent: #2e3035;
   --accent-foreground: #ffc93c;
   --destructive: #e5484d;
   --destructive-foreground: #ffffff;
-  --border: #3a3d42;
-  --input: #3a3d42;
+  --border: #34363b;
+  --input: #34363b;
   --ring: #ffc93c;
   --chart-1: #ffc93c;
   --chart-2: #e5484d;
   --chart-3: #34d27b;
-  --chart-4: #d9dadc;
-  --chart-5: #9a9ea6;
-  --sidebar: #2b2d31;
-  --sidebar-foreground: #d9dadc;
+  --chart-4: #e4e5e7;
+  --chart-5: #9a9ca1;
+  --sidebar: #232529;
+  --sidebar-foreground: #e4e5e7;
   --sidebar-primary: #ffc93c;
-  --sidebar-primary-foreground: #1e2024;
-  --sidebar-accent: #34373d;
-  --sidebar-accent-foreground: #d9dadc;
-  --sidebar-border: #3a3d42;
+  --sidebar-primary-foreground: #18191c;
+  --sidebar-accent: #2e3035;
+  --sidebar-accent-foreground: #e4e5e7;
+  --sidebar-border: #34363b;
   --sidebar-ring: #ffc93c;
 }
 
@@ -151,7 +151,7 @@
 }
 
 /* ─── Signal Yellow pulse dot for live status pills ───────────────────────── */
-@keyframes unipulse-live {
+@keyframes syncme-live {
   0%,
   100% {
     box-shadow: 0 0 0 0 rgba(255, 201, 60, 0.55);
@@ -161,5 +161,5 @@
   }
 }
 .live-dot {
-  animation: unipulse-live 1.8s ease-in-out infinite;
+  animation: syncme-live 1.8s ease-in-out infinite;
 }
