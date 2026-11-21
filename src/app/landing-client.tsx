@@ -88,9 +88,26 @@ const AUTH_ERROR_LABELS: Record<string, string> = {
   not_configured: "Google OAuth is not configured on this deployment yet — add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.",
   missing_code: "Google did not return an authorization code. Please try signing in again.",
   token_exchange_failed: "Could not exchange the authorization code with Google. Please try again.",
+  oauth_failed:
+    "Sign-in with Google failed on our server. Check the deployment logs for the exact reason, then try again.",
 };
 
-export function LandingClient({ authError }: { authError?: string }) {
+export function LandingClient({
+  authError,
+  oauthError,
+  oauthDetail,
+}: {
+  authError?: string;
+  oauthError?: string;
+  oauthDetail?: string;
+}) {
+  const banner = authError
+    ? (AUTH_ERROR_LABELS[authError] ?? "Sign-in failed. Please try again.")
+    : oauthError
+      ? `${AUTH_ERROR_LABELS[oauthError] ?? "Sign-in failed. Please try again."}${
+          oauthDetail ? ` (${oauthDetail.slice(0, 140)})` : ""
+        }`
+      : null;
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
       <header className="sticky top-0 z-40 border-b border-border/60 bg-background/85 backdrop-blur">
@@ -156,12 +173,12 @@ export function LandingClient({ authError }: { authError?: string }) {
             </Button>
           </div>
 
-          {authError && (
+          {banner && (
             <p
               role="alert"
               className="mx-auto mt-6 max-w-md rounded-lg border border-rose-400/30 bg-rose-400/10 px-4 py-2.5 text-xs leading-relaxed text-rose-300"
             >
-              {AUTH_ERROR_LABELS[authError] ?? "Sign-in failed. Please try again."}
+              {banner}
             </p>
           )}
 

@@ -10,6 +10,12 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const origin = resolveOrigin(req);
   const res = NextResponse.redirect(`${origin}/dashboard`);
-  res.cookies.set("syncme_demo", "1", { path: "/", sameSite: "lax" });
+  res.cookies.set("syncme_demo", "1", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 8 * 3600,
+  });
   return res;
 }

@@ -14,17 +14,36 @@ export function googleOAuthConfigured(): boolean {
   return Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
 }
 
+const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)(:\d+)?$/i;
+
 /**
- * Prefer NEXT_PUBLIC_APP_URL when set, else derive the request origin
- * dynamically (x-forwarded-proto/host) so both http://localhost:3000 and
- * https://syncme.vercel.app work seamlessly.
+ * Single source of truth for the OAuth origin — used identically by
+ * /api/auth/google, /api/auth/callback, /api/auth/logout and /api/demo/enter
+ * so the Google redirect_uri is always byte-identical across the flow.
+ *
+ * Precedence: NEXT_PUBLIC_APP_URL → request origin (req.nextUrl.origin).
+ * Safety net: if someone leaves NEXT_PUBLIC_APP_URL=http://localhost:3000 in a
+ * deployed (Vercel) environment, trust the request origin instead — otherwise
+ * every OAuth redirect would point at the visitor's own localhost.
  */
 export function resolveOrigin(req: NextRequest): string {
-  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim();
-  if (configured) return configured.replace(/\/+$/, "");
-  const proto = req.headers.get("x-forwarded-proto") ?? req.nextUrl.protocol.replace(":", "") ?? "http";
-  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? req.nextUrl.host;
-  return `${proto}://${host}`;
+  const requestOrigin = req.nextUrl.origin.replace(/\/+$/, "");
+  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/+$/, "");
+  if (configured && (!LOCAL_ORIGIN.test(configured) || LOCAL_ORIGIN.test(requestOrigin))) {
+    return configured;
+  }
+  return requestOrigin;
+}
+
+/** Cookie options shared by every auth route (Vercel: NODE_ENV=production). */
+export function sessionCookieOptions(maxAge: number) {
+  return {
+    httpOnly: true as const,
+    sameSite: "lax" as const,
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge,
+  };
 }
 
 export function buildGoogleAuthUrl(redirectUri: string): string {
@@ -73,8 +92,45 @@ export async function exchangeGoogleCode(code: string, redirectUri: string): Pro
     signal: AbortSignal.timeout(15_000),
     cache: "no-store",
   });
-  if (!res.ok) throw new Error(`Google token exchange failed: HTTP ${res.status}`);
+  if (!res.ok) {
+    // Log the exact Google response body — redirect_uri_mismatch / invalid_grant
+    // are diagnosed from this line in the serverless function logs.
+    const body = await res.text().catch(() => "");
+    console.error("[SyncMe OAuth] token exchange failed:", res.status, body || "(empty body)");
+    throw new Error(
+      `Google token exchange failed: HTTP ${res.status}${body ? ` — ${body.slice(0, 200)}` : ""}`,
+    );
+  }
   return (await res.json()) as GoogleTokenResponse;
+}
+
+/**
+ * Silent refresh: exchange a long-lived refresh token for a fresh access
+ * token. Keeps the session alive without forcing the student through the
+ * consent screen every ~55 minutes. Fully stateless — everything travels in
+ * cookies, nothing touches a filesystem or database (Vercel-safe).
+ */
+export async function refreshAccessToken(refreshToken: string): Promise<string> {
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      refresh_token: refreshToken,
+      client_id: process.env.GOOGLE_CLIENT_ID ?? "",
+      client_secret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+      grant_type: "refresh_token",
+    }),
+    signal: AbortSignal.timeout(15_000),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    console.error("[SyncMe OAuth] token refresh failed:", res.status, body || "(empty body)");
+    throw new GmailAuthError();
+  }
+  const data = (await res.json()) as { access_token?: string };
+  if (!data.access_token) throw new GmailAuthError();
+  return data.access_token;
 }
 
 /** Fetch the signed-in student's Google profile (name, email, picture). */

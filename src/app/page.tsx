@@ -7,5 +7,7 @@ export default async function HomePage({
 }) {
   const params = await searchParams;
   const authError = typeof params.auth_error === "string" ? params.auth_error : undefined;
-  return <LandingClient authError={authError} />;
+  const error = typeof params.error === "string" ? params.error : undefined;
+  const detail = typeof params.detail === "string" ? params.detail : undefined;
+  return <LandingClient authError={authError} oauthError={error} oauthDetail={detail} />;
 }
