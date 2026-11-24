@@ -75,15 +75,15 @@ async function driveFetch(token: string, url: string, init?: RequestInit): Promi
  * Drive API is not enabled for the OAuth project yet; log the exact enable
  * URL so the fix is a single click from the function logs.
  */
-function classifyFailure(res: Response, context: string): AppDataStatus {
-  if (res.status === 403) {
+function classifyFailure(status: number, context: string): AppDataStatus {
+  if (status === 403) {
     const hint =
       "Enable it at https://console.cloud.google.com/apis/library/drive.googleapis.com (one click), then sign in again.";
     console.error(`[SyncMe AppData] ${context} → HTTP 403 (Drive API unavailable or scope missing). ${hint}`);
     return "unavailable";
   }
-  if (res.status === 401) return "no-scope";
-  console.error(`[SyncMe AppData] ${context} → HTTP ${res.status} — treating as unavailable`);
+  if (status === 401) return "no-scope";
+  console.error(`[SyncMe AppData] ${context} → HTTP ${status} — treating as unavailable`);
   return "unavailable";
 }
 

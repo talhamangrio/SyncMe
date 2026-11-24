@@ -28,7 +28,7 @@ const SECTIONS: { title: string; paragraphs: string[] }[] = [
   {
     title: "AI processing",
     paragraphs: [
-      "To turn emails into tasks, SyncMe sends the text of recently scanned emails to a large language model (GLM via Z.ai) for extraction. This processing is transient: it is used only to produce the task list shown to you and is not retained for training or any other purpose.",
+      "To turn emails into tasks, SyncMe sends the text of recently scanned emails to Google Gemini for extraction — the only AI engine in the pipeline. This processing is transient: it is used only to produce the task list shown to you and is not retained for training or any other purpose.",
     ],
   },
   {

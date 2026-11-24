@@ -1,4 +1,4 @@
-// ─── Google Gemini extraction engine (PRIMARY AI classifier) ────────────────
+// ─── Google Gemini extraction engine (the ONLY AI classifier) ───────────────
 // gemini-2.5-flash via generativelanguage.googleapis.com with
 // generationConfig.responseMimeType = "application/json" (guaranteed strict
 // JSON, no markdown fences) and temperature 0.1 for deterministic extraction.
@@ -6,8 +6,8 @@
 // Contract: returns SyncTask[] on success — an EMPTY array is a legitimate
 // success meaning "no email is actionable" — or null when GEMINI_API_KEY is
 // missing, still the paste-me placeholder, or the call/parse fails. Callers
-// then silently fall back to the Z.ai GLM pipeline (src/lib/zai.ts), which has
-// its own SDK + rule-engine fallbacks. This module never throws.
+// then fall back to the bundled deterministic rule engine (src/lib/heuristic.ts).
+// No other AI API is ever called: one email, one engine, one task.
 
 import type { RawEmail, SyncTask } from "@/lib/types";
 import { sanitizeTask } from "@/lib/types";
@@ -51,7 +51,7 @@ EXTRACT ONLY actionable student items in these scopes:
 - HEALTH: Klinikák / clinic / doctor medical appointments and medical deadlines.
 - PROFESSIONAL: professor, thesis supervisor or university administration correspondence containing a personal action or deadline (consultation, thesis submission, office appointments).
 
-Output schema — every actionable email produces exactly ONE task object:
+Output schema — every actionable email produces AT MOST ONE task object (one email can never yield two tasks; if you already emitted a task for an email, do not emit another for it):
 {"tasks": [{"id": string, "title": string, "category": "Neptun"|"Moodle"|"Medical"|"Immigration", "dueDate": string, "priority": "High"|"Medium"|"Low", "actionSummary": string, "sourceEmailSubject": string}]}
 
 Field rules:
@@ -73,7 +73,7 @@ ${JSON.stringify(payload)}`;
 /**
  * Primary extraction via Google Gemini (gemini-2.5-flash).
  * Returns null (never throws) when the key is absent/placeholder or anything
- * fails — the caller falls back to the Z.ai pipeline silently.
+ * fails — the caller falls back to the deterministic rule engine silently.
  */
 export async function extractTasksGemini(
   emails: RawEmail[],

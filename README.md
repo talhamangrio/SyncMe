@@ -2,20 +2,20 @@
 
 **SyncMe** reads your Gmail and Moodle calendar, extracts every exam, quiz, appointment and deadline, and tells you exactly what to do next — grouped by priority, conflict-checked, with worthless mail (spam, newsletters, personal chat) silently ignored. Built for University of Debrecen students.
 
-![Stack](https://img.shields.io/badge/Next.js%2016-App%20Router-black) ![AI](https://img.shields.io/badge/Google_Gemini-primary_extractor-8E75B2) ![Fallback](https://img.shields.io/badge/fallback-Z.ai_GLM-FFC93C) ![Auth](https://img.shields.io/badge/Google_OAuth-gmail.readonly-4285F4)
+![Stack](https://img.shields.io/badge/Next.js%2016-App%20Router-black) ![AI](https://img.shields.io/badge/Google_Gemini-the_only_AI_extractor-8E75B2) ![Fallback](https://img.shields.io/badge/fallback-rule_engine-FFC93C) ![Auth](https://img.shields.io/badge/Google_OAuth-gmail.readonly-4285F4)
 
 ## How it works
 
 ```
 Gmail (Neptun / Klinika / Immigration / Professors) ──►  GET /api/gmail/sync ──┐
 Moodle elearning.unideb.hu (.ics private feed)      ──►  POST /api/moodle/sync ─┼─► Gemini AI ─► Dashboard
-Demo Sandbox (one click, zero credentials)          ──►  GET  /api/demo/enter ──┘   (fallback: Z.ai GLM)
+Demo Sandbox (one click, zero credentials)          ──►  GET  /api/demo/enter ──┘   (fallback: rule engine)
 ```
 
 - **Read-only Gmail access** (`gmail.readonly`) — the last 30 days of university email are scanned, never stored.
-- **Google Gemini extraction** (primary) — emails + current Europe/Budapest date/time in, strict JSON tasks out (`{ title, category: Neptun|Moodle|Medical|Immigration, dueDate, priority, actionSummary, sourceEmailSubject }`).
+- **Single AI engine: Google Gemini** — emails + current Europe/Budapest date/time in, strict JSON tasks out (`{ title, category: Neptun|Moodle|Medical|Immigration, dueDate, priority, actionSummary, sourceEmailSubject }`).
 - **Worthless-mail gate** — the AI prompt hard-ignores promotional mail, social notifications, general announcements, already-answered mail, and personal chat between students ("33", "ok", "I sent a file to my friend") — so only actionable institutional mail becomes a task.
-- **Silent fallback chain** — Gemini → Z.ai `glm-4.5-flash` → bundled Z.ai SDK → deterministic rule engine, so sync never hard-fails.
+- **Deterministic fallback, never a second AI** — if Gemini is unavailable the bundled rule engine takes over, so sync never hard-fails and the same email can never be extracted twice by two different models.
 - **Priority-grouped list** — the dashboard groups tasks into High / Medium / Low sections instead of a flat card grid.
 - **Conflict radar** — days holding 2+ deadlines raise yellow collision alerts.
 - **Demo Sandbox** — a simulated Debrecen inbox with dynamically generated dates, so demos work on any day without credentials.
@@ -27,7 +27,7 @@ Demo Sandbox (one click, zero credentials)          ──►  GET  /api/demo/en
 
 - [Bun](https://bun.sh) 1.1+ (recommended) or Node.js 20.9+
 - A Google account with Gmail (a `@unideb.hu` university inbox gives the best results)
-- Two free API keys: **Google Gemini** (primary) and **Z.ai** (fallback — optional)
+- One free API key: **Google Gemini**
 
 ### 1. Install & configure
 
@@ -42,9 +42,8 @@ cp .env.example .env.local   # then paste your real keys
 | --- | --- | --- |
 | `GEMINI_API_KEY` | Yes | [Google AI Studio](https://aistudio.google.com/apikey) → *Get API key* (free tier works) |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Only for real Gmail | Google Cloud Console → OAuth client ID (Web application) |
-| `ZAI_API_KEY` | Optional | [z.ai](https://z.ai) → API Keys (used only if Gemini fails) |
 | `NEXT_PUBLIC_APP_URL` | Optional | Leave as `http://localhost:3000` locally — the origin is auto-detected in production |
-| `GEMINI_MODEL` / `ZAI_MODEL` | Optional | Model overrides (`gemini-3.8-flash` / `glm-4.5-flash` by default) |
+| `GEMINI_MODEL` | Optional | Model override (`gemini-3.8-flash` by default) |
 
 > SyncMe works **without any keys** in Demo Sandbox mode — API keys are only needed for real Gmail sync and live AI extraction.
 
@@ -88,7 +87,7 @@ bunx tsc --noEmit      # type check
 | `/api/auth/google` | GET | Start Google OAuth (openid email profile + gmail.readonly) |
 | `/api/auth/callback` | GET | Exchange code → httpOnly cookie (`gmail_access_token`, maxAge 3500) + profile session cookie → `/dashboard` |
 | `/api/auth/logout` | POST | Clear SyncMe cookies, return to `/` |
-| `/api/gmail/sync` | GET | Gmail (last 30d, max 12) → Gemini strict-JSON extraction → Z.ai fallback → rule engine → deduped tasks |
+| `/api/gmail/sync` | GET | Gmail (last 30d, max 12) → Gemini strict-JSON extraction → rule-engine fallback → deduped tasks |
 | `/api/moodle/sync` | POST | `{ icsUrl }` → server-side fetch + VEVENT parse → normalized tasks |
 | `/api/demo/enter` | GET | Set demo cookie → `/dashboard` (simulated inbox) |
 
@@ -105,10 +104,8 @@ bunx tsc --noEmit      # type check
 
 | Engine | Role |
 | --- | --- |
-| **Google Gemini** (`gemini-2.5-flash` class, strict JSON mode, temp 0.1) | Primary classifier — reads email subjects/snippets and returns prioritized tasks as JSON; also enforces the worthless-mail ignore rules |
-| **Z.ai GLM** (`glm-4.5-flash`) | Silent fallback extractor when Gemini is unavailable |
-| **z-ai-web-dev-sdk** | Third-line extraction via the bundled Z.ai SDK |
-| **Deterministic rule engine** | Keyword/date-parser fallback — guarantees sync still works with zero AI keys |
+| **Google Gemini** (`gemini-2.5-flash` class, strict JSON mode, temp 0.1) | The ONLY AI classifier — reads email subjects/snippets and returns prioritized tasks as JSON; also enforces the worthless-mail ignore rules |
+| **Deterministic rule engine** | Keyword/date-parser fallback when Gemini is unavailable — guarantees sync still works with zero AI keys |
 
 ### External APIs
 
@@ -116,7 +113,6 @@ bunx tsc --noEmit      # type check
 | --- | --- |
 | **Gmail API** (Google OAuth 2.0, `gmail.readonly`) | Read-only scan of the last 30 days of university email (max 12 per sync) |
 | **Google Gemini API** (`generativelanguage.googleapis.com`) | Task extraction |
-| **Z.ai API** (`api.z.ai`) | Fallback extraction |
 | **Moodle .ics private calendar feed** (`elearning.unideb.hu`) | Server-side VEVENT parsing of Moodle deadlines |
 
 ### Development stack & tooling
@@ -135,12 +131,12 @@ bunx tsc --noEmit      # type check
 
 ### AI assistant used to build this project
 
-- **Z.ai Code** — the GLM-powered agentic coding assistant used to scaffold the repo, implement the Gmail/Moodle pipelines, design the UI, wire the Gemini/Z.ai extraction chain, debug and browser-verify every release. All code in this repository was written and iterated in pair-programming sessions with Z.ai Code.
+- **Z.ai Code** — the GLM-powered agentic coding assistant used to scaffold the repo, implement the Gmail/Moodle pipelines, design the UI, wire the Gemini extraction pipeline, debug and browser-verify every release. All code in this repository was written and iterated in pair-programming sessions with Z.ai Code.
 
 ## Security notes
 
 - `.env.local` is git-ignored; `.env.example` documents the required keys.
-- Rotate your Google Client Secret, Gemini key and Z.ai API key after any public exposure (screenshots, chats).
+- Rotate your Google Client Secret and Gemini key after any public exposure (screenshots, chats).
 - Revoke access anytime at [myaccount.google.com/permissions](https://myaccount.google.com/permissions) or via the dashboard Logout button.
 
 > Student-built for the University of Debrecen community. Not affiliated with the University of Debrecen.

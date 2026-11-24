@@ -256,7 +256,7 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
   const [syncing, setSyncing] = useState(!isDemo);
   const [lastSync, setLastSync] = useState<Date | null>(null);
   const [connected, setConnected] = useState(true);
-  const [engine, setEngine] = useState<"gemini" | "zai" | "rule" | null>(null);
+  const [engine, setEngine] = useState<"gemini" | "rule" | null>(null);
   const [doneIds, setDoneIds] = useState<Set<string>>(new Set());
   const [doneAt, setDoneAt] = useState<Record<string, string>>({});
   const [doneTasks, setDoneTasks] = useState<Record<string, DoneEntry>>({});
@@ -267,6 +267,14 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
   const [moodleConnecting, setMoodleConnecting] = useState(false);
   const [moodleError, setMoodleError] = useState<string | null>(null);
   const [moodleSuccess, setMoodleSuccess] = useState<string | null>(null);
+  /**
+   * Whether the feed URL actually reached the student's Google account
+   * (Drive app-data). null = unknown (no round trip yet). When definitively
+   * false the card offers a one-click Google reconnect — the usual cause is a
+   * consent granted before the drive.appdata scope existed, which made every
+   * account write fail silently and the link device-local again.
+   */
+  const [moodleAccountSynced, setMoodleAccountSynced] = useState<boolean | null>(null);
   const [drawerTask, setDrawerTask] = useState<SyncTask | null>(null);
   const [emailsOpen, setEmailsOpen] = useState(false);
   const [completingIds, setCompletingIds] = useState<Set<string>>(new Set());
@@ -461,8 +469,8 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
           toast.success(`${data.tasks.length} task${data.tasks.length === 1 ? "" : "s"} extracted`, {
             description:
               data.engine === "rule"
-                ? "The AI was unavailable, so the rule based extractor ran instead."
-                : `${data.engine === "gemini" ? "Gemini" : "GLM"} scanned ${data.emails.length} university email${
+                ? "Gemini was unavailable, so the rule based extractor ran instead."
+                : `Gemini scanned ${data.emails.length} university email${
                     data.emails.length === 1 ? "" : "s"
                   } from the last 30 days.`,
           });
@@ -488,16 +496,23 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
   // /api/moodle/prefs, so it follows the account: connect once on the phone,
   // the laptop auto-connects after sign-in. Failures degrade silently to the
   // per-browser copy.
-  const saveMoodlePrefs = useCallback(async (url: string) => {
+  const saveMoodlePrefs = useCallback(async (url: string): Promise<boolean> => {
     try {
-      await fetch("/api/moodle/prefs", {
+      const res = await fetch("/api/moodle/prefs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ icsUrl: url }),
       });
+      if (res.ok) {
+        const data = (await res.json()) as { synced?: boolean };
+        const synced = data.synced === true;
+        setMoodleAccountSynced(synced);
+        return synced;
+      }
     } catch {
       // Offline or account storage unavailable — this browser keeps the link.
     }
+    return false;
   }, []);
 
   // ── Moodle .ics connect (inline rail card, client side validation) ────────
@@ -530,10 +545,14 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
       );
       setMoodleConnected(true);
       window.localStorage.setItem(MOODLE_URL_KEY, url);
-      void saveMoodlePrefs(url);
+      const syncedToAccount = await saveMoodlePrefs(url);
       if (!silent) {
         setMoodleError(null);
-        setMoodleSuccess("Calendar saved to your account. Next sync in 30 seconds.");
+        setMoodleSuccess(
+          syncedToAccount
+            ? "Calendar saved to your account. Next sync in 30 seconds."
+            : "Calendar saved on this device — reconnect Google to sync it across devices.",
+        );
       }
     } catch (err) {
       if (!silent) {
@@ -554,7 +573,8 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
       try {
         const res = await fetch("/api/moodle/prefs", { cache: "no-store" });
         if (res.ok) {
-          const data = (await res.json()) as { icsUrl?: string | null };
+          const data = (await res.json()) as { icsUrl?: string | null; synced?: boolean };
+          setMoodleAccountSynced(data.synced === true);
           if (typeof data.icsUrl === "string" && data.icsUrl && isValidHttpsUrl(data.icsUrl)) {
             accountUrl = data.icsUrl;
           }
@@ -1244,8 +1264,7 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
                 </div>
               </div>
               <p className="body-6 mt-2 text-ink-3">
-                Paste your private elearning.unideb.hu calendar feed once — saved to your own Google account, so
-                every device you sign in on connects automatically.
+                Paste your private elearning.unideb.hu calendar feed once — it follows your Google account.
               </p>
               <div className="mt-4 space-y-2">
                 <Input
@@ -1261,10 +1280,16 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
                   aria-label="Moodle .ics calendar URL"
                   className="caption-1 rounded-lg border-border bg-alt px-3 py-2 text-ink placeholder:text-ink-3"
                 />
-                {moodleConnected && (
-                  <p className="caption-4 text-ink-3">
-                    Auto-fetches with every sync — click the pen to change the link.
-                  </p>
+                {moodleConnected && moodleAccountSynced === false && !isDemo && (
+                  <div className="rounded-lg border border-status-warn-border bg-status-warn-bg px-3 py-2">
+                    <p className="caption-4 text-ink-2">Saved on this device only.</p>
+                    <a
+                      href="/api/auth/google"
+                      className="caption-1 mt-0.5 inline-flex items-center gap-1 font-semibold text-status-warn hover:underline"
+                    >
+                      Reconnect Google to sync across devices
+                    </a>
+                  </div>
                 )}
                 {moodleError && (
                   <p role="alert" className="caption-1 text-status-high">
@@ -1335,7 +1360,7 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
                 <div className="flex items-center justify-between gap-2">
                   <dt className="caption-1 text-ink-3">Extractor</dt>
                   <dd className="caption-1 text-ink">
-                    {isDemo ? "Demo data" : engine === "gemini" ? "Gemini" : engine === "zai" ? "GLM" : engine === "rule" ? "Rule engine" : "—"}
+                    {isDemo ? "Demo data" : engine === "gemini" ? "Gemini" : engine === "rule" ? "Rule engine" : "—"}
                   </dd>
                 </div>
                 <div className="flex items-center justify-between gap-2">

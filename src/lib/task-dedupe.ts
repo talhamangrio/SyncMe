@@ -6,7 +6,13 @@
 // reaches the student twice (Moodle .ics event + its announcement email).
 //
 // Collapse rules, safest first:
-//   1. Same source email (normalized subject) + similar title  → same task.
+//   1. Same source email (normalized subject) + (similar title OR the same
+//      calendar day OR both undated) → same task. One email IS one real-world
+//      deadline, however differently the two engines worded it — the reported
+//      twin was "Attend appointment with General Practitioner" (AI) vs
+//      "Appointment booked: Thu 26 Nov 2026 with General Practitioner" (rule
+//      engine): same email, same day, only 40% token overlap, so a pure title
+//      similarity check let both through.
 //      (The generic "Moodle .ics calendar feed" label never counts as a
 //      subject — every Moodle event shares it.)
 //   2. Identical normalized title + identical day              → same task.
@@ -74,11 +80,19 @@ export function areDuplicateTasks(a: SyncTask, b: SyncTask): boolean {
   const nb = normalizeTitleKey(b.title);
   if (!na || !nb) return false;
 
-  // 1. Same underlying email with a re-worded title — the extractor's twin.
+  // 1. Same underlying email — the extractor's twin, however re-worded. A
+  //    similar title is enough; failing that, two copies that land on the same
+  //    calendar day (or that are both undated) can only be the same deadline
+  //    read twice. Two different deadlines behind one subject would have to
+  //    fall on different days — and those stay separate.
   const subjA = normalizeTitleKey(a.sourceEmailSubject);
   const subjB = normalizeTitleKey(b.sourceEmailSubject);
-  if (subjA && subjA === subjB && !GENERIC_FEED_SUBJECTS.has(subjA) && titlesSimilar(a.title, b.title)) {
-    return true;
+  if (subjA && subjA === subjB && !GENERIC_FEED_SUBJECTS.has(subjA)) {
+    if (titlesSimilar(a.title, b.title)) return true;
+    const dayA = dayKeyOf(a.dueDate);
+    const dayB = dayKeyOf(b.dueDate);
+    if (dayA === null && dayB === null) return true;
+    if (dayA !== null && dayA === dayB) return true;
   }
 
   // 2. Different feeds, same day, same title — the same deadline seen twice.
@@ -90,7 +104,7 @@ export function areDuplicateTasks(a: SyncTask, b: SyncTask): boolean {
 }
 
 /** Which copy of a duplicate survives. */
-function betterCopy(a: SyncTask, b: SyncTask): SyncTask {
+function betterCopy<T extends SyncTask>(a: T, b: T): T {
   const na = normalizeDueDate(a.dueDate);
   const nb = normalizeDueDate(b.dueDate);
   const aDated = na !== "unknown";
@@ -104,6 +118,14 @@ function betterCopy(a: SyncTask, b: SyncTask): SyncTask {
     // itself — trust the feed over an AI time guess.
     if (na.slice(0, 10) === nb.slice(0, 10) && (a.source === "Moodle") !== (b.source === "Moodle")) {
       return a.source === "Moodle" ? a : b;
+    }
+    if (na.slice(0, 10) === nb.slice(0, 10)) {
+      // 00:00:00 almost always means "date only, no time found" — a copy
+      // carrying a real time of day reads better than a midnight placeholder
+      // (e.g. AI "Thu 26 Nov 00:00" vs subject rescue "Thu 26 Nov 09:00").
+      const aMidnight = na.endsWith("T00:00:00");
+      const bMidnight = nb.endsWith("T00:00:00");
+      if (aMidnight !== bMidnight) return aMidnight ? b : a;
     }
     // Two different readings of the same deadline — trust the earlier one.
     if (na !== nb) return na < nb ? a : b;
@@ -130,4 +152,20 @@ export function collapseDuplicateTasks<T extends SyncTask>(tasks: T[]): T[] {
     if (best !== survivors[index]) survivors[index] = best;
   }
   return survivors;
+}
+
+/**
+ * Exact-key dedupe (title + dueDate + category): the cheap first pass that
+ * removes literally identical rows before the fuzzy collapse runs.
+ */
+export function dedupeTasks(tasks: SyncTask[]): SyncTask[] {
+  const seen = new Set<string>();
+  const out: SyncTask[] = [];
+  for (const t of tasks) {
+    const key = `${t.title.toLowerCase().trim()}|${t.dueDate}|${t.category}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(t);
+  }
+  return out;
 }

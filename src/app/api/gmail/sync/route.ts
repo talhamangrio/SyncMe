@@ -6,28 +6,27 @@ import {
   refreshAccessToken,
   sessionCookieOptions,
 } from "@/lib/gmail";
-import { dedupeTasks, extractTasks } from "@/lib/zai";
 import { extractTasksGemini } from "@/lib/gemini";
+import { heuristicExtractTasks } from "@/lib/heuristic";
 import { dropExpiredTasks, normalizeDueDate, sortChronologically } from "@/lib/dates";
 import { inferFutureDateFromText } from "@/lib/subject-date";
-import { collapseDuplicateTasks } from "@/lib/task-dedupe";
+import { collapseDuplicateTasks, dedupeTasks } from "@/lib/task-dedupe";
 import type { RawEmail, SyncTask } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Gemini (gemini-3.8-flash) is the PRIMARY classifier/extractor. When
- * GEMINI_API_KEY is missing or the call fails, extractTasksGemini returns
- * null and we silently fall back to the existing Z.ai GLM pipeline
- * (glm-4.5-flash → bundled SDK → deterministic rule engine).
+ * Gemini is the ONE and ONLY AI extractor (single-engine guarantee: the same
+ * email can never be classified twice by two different AI models). When the
+ * GEMINI_API_KEY is missing or the call fails, the bundled deterministic rule
+ * engine (src/lib/heuristic.ts) takes over — no other AI API is ever called.
  */
 async function extractWithFallback(
   emails: RawEmail[],
-): Promise<{ tasks: SyncTask[]; aiStatus: "ai" | "heuristic"; engine: "gemini" | "zai" | "rule" }> {
+): Promise<{ tasks: SyncTask[]; aiStatus: "ai" | "heuristic"; engine: "gemini" | "rule" }> {
   const geminiTasks = await extractTasksGemini(emails).catch(() => null);
   if (geminiTasks) return { tasks: geminiTasks, aiStatus: "ai", engine: "gemini" };
-  const { tasks, aiStatus } = await extractTasks(emails);
-  return { tasks, aiStatus, engine: aiStatus === "ai" ? "zai" : "rule" };
+  return { tasks: heuristicExtractTasks(emails), aiStatus: "heuristic", engine: "rule" };
 }
 
 /**
@@ -53,8 +52,9 @@ function rescueUndatedTasks(tasks: SyncTask[], emails: RawEmail[]): SyncTask[] {
  * GET /api/gmail/sync — fully stateless Gmail pipeline:
  *   1. read the OAuth access token from the httpOnly cookie,
  *   2. query Gmail for university email (last 30 days, max 12),
- *   3. extract strict-JSON tasks with Google Gemini (primary), silently
- *      falling back to Z.ai when Gemini is unavailable,
+ *   3. extract strict-JSON tasks with Google Gemini — the only AI engine —
+ *      falling back to the local deterministic rule engine when Gemini is
+ *      unavailable (never a second AI model),
  *   4. deterministic post-processing on the server: normalize every dueDate
  *      into ISO-8601 `YYYY-MM-DDTHH:mm:ss` (Europe/Budapest), DROP any task
  *      dated strictly before today, dedupe and COLLAPSE duplicate twins (the
