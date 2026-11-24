@@ -6,6 +6,7 @@
 import type { RawEmail, SyncTask, TaskCategory, TaskPriority } from "@/lib/types";
 import { sanitizeTask } from "@/lib/types";
 import { budapestTodayKey } from "@/lib/dates";
+import { inferFutureDateFromText } from "@/lib/subject-date";
 
 const ZAI_ENDPOINT = "https://api.z.ai/api/paas/v4/chat/completions";
 // glm-4.5-flash is the free tier workhorse (verified live: strict JSON with
@@ -30,7 +31,7 @@ Rules:
 - EXTRACT ONLY actionable items in these scopes: ACADEMIC (deadlines, exams, Neptun admin, registration, payments), EDUCATIONAL (Moodle quizzes, assignments, homework), IMMIGRATION (residence permit, Enter Hungary, document appointments), HEALTH (Klinikák/clinic/doctor appointments), PROFESSIONAL (professor or administration correspondence with a personal action or deadline).
 - For every actionable email produce exactly ONE task object.
 - "category" must be exactly one of: "Neptun" (exams, grades, registration, professor/admin mail), "Moodle" (e-learning, quizzes, assignments), "Medical" (clinic, doctor, appointments), "Immigration" (residence permit, Enter Hungary, aliens policing).
-- "dueDate": resolve the most relevant future date mentioned (today ${todayKey} or later) into an ISO-8601 datetime "YYYY-MM-DDTHH:mm:ss" in Europe/Budapest time — never before ${todayKey}. If no future date is stated, use the literal string "unknown".
+- "dueDate": resolve the most relevant future date mentioned into an ISO-8601 datetime "YYYY-MM-DDTHH:mm:ss" in Europe/Budapest time — never before ${todayKey}. ALWAYS scan the email SUBJECT LINE FIRST: appointment and deadline dates are very often stated right in the subject (e.g. "Appointment on 26 November 2025", "2025. november 26.", "26/11", "Nov 26 at 10:00", "Időpont: 2025.11.26.") even when the body looks undated — parse Hungarian dates like "2025. november 26." into ISO form too. Then check the body. If no future date is stated anywhere, use the literal string "unknown".
 - "priority": "High" for exams, immigration matters or deadlines within 72 hours; "Medium" for quizzes and appointments; "Low" for everything else.
 - "actionSummary": one short sentence telling the student exactly what to do.
 - "sourceEmailSubject": copy the exact subject line of the email the task came from.
@@ -135,6 +136,11 @@ function guessDueDate(text: string, emailDate: string, now: Date): string {
     const d = new Date(`${iso[1]}T${iso[2] ?? "09"}:${iso[3] ?? "00"}:00`);
     if (!Number.isNaN(d.getTime()) && d.getTime() > now.getTime() - 86400_000) return d.toISOString();
   }
+  // Natural-language pass over the same text (subject first, then body):
+  // "26 November", "2025. november 26.", "26/11", "Nov 26 at 10:00" — strictly
+  // future-only, so a stale past mention can never expire the task.
+  const natural = inferFutureDateFromText(text, now);
+  if (natural) return natural;
   const email = new Date(emailDate);
   if (!Number.isNaN(email.getTime()) && email.getTime() > now.getTime() - 86400_000) return email.toISOString();
   return "unknown";
@@ -158,7 +164,8 @@ export function heuristicExtractTasks(emails: RawEmail[], now: Date = new Date()
       id: `heuristic-${email.id}`,
       title: cleanTitle(email.subject),
       category: rule?.category ?? "Neptun",
-      dueDate: guessDueDate(email.snippet, email.date, now),
+      // Subject first, then body — the date is often stated in the title.
+      dueDate: guessDueDate(`${email.subject}\n${email.snippet}`, email.date, now),
       priority: rule?.priority ?? "Medium",
       actionSummary: `Review "${email.subject}" and take the required action.`,
       sourceEmailSubject: email.subject,

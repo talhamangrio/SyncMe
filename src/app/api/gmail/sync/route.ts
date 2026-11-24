@@ -9,6 +9,7 @@ import {
 import { dedupeTasks, extractTasks } from "@/lib/zai";
 import { extractTasksGemini } from "@/lib/gemini";
 import { dropExpiredTasks, normalizeDueDate, sortChronologically } from "@/lib/dates";
+import { inferFutureDateFromText } from "@/lib/subject-date";
 import type { RawEmail, SyncTask } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +27,25 @@ async function extractWithFallback(
   if (geminiTasks) return { tasks: geminiTasks, aiStatus: "ai", engine: "gemini" };
   const { tasks, aiStatus } = await extractTasks(emails);
   return { tasks, aiStatus, engine: aiStatus === "ai" ? "zai" : "rule" };
+}
+
+/**
+ * Subject-line rescue: the AI engines sometimes leave a task undated even
+ * when the appointment/deadline day is stated right in the email SUBJECT
+ * ("Appointment on 26 November 2025", "2025. november 26.", "26/11"). For
+ * every undated task, scan the source subject + task title (+ the raw email
+ * subject) with the deterministic date reader and fill in the earliest
+ * future date found. Past-only mentions yield null, so an undated task is
+ * never demoted into the expired bucket by a wrong guess.
+ */
+function rescueUndatedTasks(tasks: SyncTask[], emails: RawEmail[]): SyncTask[] {
+  return tasks.map((t) => {
+    if (t.dueDate !== "unknown") return t;
+    const email = emails.find((e) => e.subject === t.sourceEmailSubject);
+    const text = `${t.sourceEmailSubject}\n${t.title}${email ? `\n${email.subject}` : ""}`;
+    const inferred = inferFutureDateFromText(text);
+    return inferred ? { ...t, dueDate: inferred } : t;
+  });
 }
 
 /**
@@ -60,10 +80,12 @@ export async function GET() {
   const attempt = async (accessToken: string) => {
     const emails = await fetchUniversityEmails(accessToken, 12);
     const { tasks, aiStatus, engine } = await extractWithFallback(emails);
-    // Deterministic expiration guard + normalization + strict chronological
-    // order — nothing dated before today (Europe/Budapest) ever leaves here.
+    // Deterministic expiration guard + normalization + subject rescue + strict
+    // chronological order — nothing dated before today (Europe/Budapest) ever
+    // leaves here, and undated tasks whose subject carries a date are healed.
     const dated: SyncTask[] = tasks.map((t) => ({ ...t, dueDate: normalizeDueDate(t.dueDate) }));
-    const cleaned = sortChronologically(dropExpiredTasks(dedupeTasks(dated)));
+    const rescued = rescueUndatedTasks(dated, emails);
+    const cleaned = sortChronologically(dropExpiredTasks(dedupeTasks(rescued)));
     return { emails, tasks: cleaned, aiStatus, engine };
   };
 

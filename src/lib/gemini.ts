@@ -58,7 +58,7 @@ Field rules:
 - "id": short unique slug derived from the source email id.
 - "title": concise imperative summary, max 120 characters.
 - "category": exactly one of "Neptun" (exams, grades, registration, professor/admin mail), "Moodle" (e-learning, quizzes, assignments), "Medical" (clinic, doctor, appointments), "Immigration" (residence permit, Enter Hungary, aliens policing).
-- "dueDate": resolve the most relevant FUTURE date mentioned (today ${todayKey} or later) into an ISO-8601 datetime "YYYY-MM-DDTHH:mm:ss" in Europe/Budapest time — never before ${todayKey}. If no future date is stated, use the literal string "unknown".
+- "dueDate": resolve the most relevant FUTURE date mentioned into an ISO-8601 datetime "YYYY-MM-DDTHH:mm:ss" in Europe/Budapest time — never before ${todayKey}. ALWAYS scan the email SUBJECT LINE FIRST: appointment and deadline dates are very often stated right in the subject (e.g. "Appointment on 26 November 2025", "2025. november 26.", "26/11", "Nov 26 at 10:00", "Időpont: 2025.11.26.") even when the body looks undated — parse Hungarian dates like "2025. november 26." into ISO form too. Then check the body. If no future date is stated anywhere, use the literal string "unknown".
 - "priority": "High" for exams, immigration matters or deadlines within 72 hours; "Medium" for quizzes and appointments; "Low" for everything else.
 - "actionSummary": one short sentence telling the student exactly what to do.
 - "sourceEmailSubject": the exact subject line of the email the task came from.

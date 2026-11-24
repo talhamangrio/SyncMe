@@ -123,13 +123,17 @@ const P2 = new RegExp(
 
 /** P3 — day-first month name: 26 November, 26. november, 26 nov 2025, 3rd of March. */
 const P3 = new RegExp(
-  `\\b(\\d{1,2})\\s*\\.?(?:\\s*(?:st|nd|rd|th))?(?:\\s*of\\b)?\\s*(?:[-––]\\s*)?\\b(${MONTH_ALT})\\b\\.?(?:\\s*,?\\s*(\\d{4})\\b)?`,
+  `\\b(\\d{1,2})\\s*\\.?(?:\\s*(?:st|nd|rd|th))?(?:\\s*of\\b)?\\s*(?:[-–—]\\s*)?\\b(${MONTH_ALT})\\b\\.?(?:\\s*,?\\s*(\\d{4})\\b)?`,
   "i",
 );
 
-/** P4 — month-name first: Nov 26, November 26, 2025 / november 26-án. */
+/**
+ * P4 — month-name first: Nov 26, November 26, 2025 / november 26-án / Nov 26 10:00.
+ * The day is guarded with (?<!\d)…(?!\d) so a bare month+year ("December 2025")
+ * never parses as a day, while a clock time right after the day stays legal.
+ */
 const P4 = new RegExp(
-  `\\b(${MONTH_ALT})\\b\\.?\\s*(\\d{1,2})(?:\\s*(?:st|nd|rd|th))?(?!\\s*\\d)(?:\\s*[,;]?\\s*(\\d{4})(?!\\s*:|\\d)\\b)?`,
+  `\\b(${MONTH_ALT})\\b\\.?\\s*(\\d{1,2})(?!\\d)(?:\\s*(?:st|nd|rd|th))?(?:\\s*[,;]?\\s*(\\d{4})(?!\\s*:|\\d)\\b)?`,
   "i",
 );
 

@@ -13,6 +13,7 @@ import {
   Flask,
   GraduationCap,
   List,
+  PencilSimple,
   ShieldCheck,
   SignOut,
   WarningCircle,
@@ -113,6 +114,11 @@ function tagSource(tasks: SyncTask[], source: "Gmail" | "Moodle"): SyncTask[] {
  * extracted earlier are kept even if this sync missed them, and done tasks
  * never come back. Entries older than two days are pruned — the Overdue
  * group still gets a chance to warn, the past never piles up.
+ *
+ * Identity dedupe: the AI may re-slug task ids between runs, so the same
+ * underlying email can arrive under two ids (an old undated twin and a fresh
+ * dated copy). Only the best copy survives — the DATED one always wins over
+ * an undated twin, so "No date detected" rows heal on the next sync.
  */
 function mergeTasks(
   prev: SyncTask[],
@@ -124,8 +130,20 @@ function mergeTasks(
   const isDone = (t: SyncTask) => done.has(t.id) || doneKeys.has(taskIdentityKey(t));
   for (const t of prev) if (!isDone(t)) byId.set(t.id, t);
   for (const t of next) if (!isDone(t)) byId.set(t.id, t);
+  const byIdentity = new Map<string, SyncTask>();
+  for (const t of byId.values()) {
+    const key = taskIdentityKey(t);
+    const current = byIdentity.get(key);
+    if (!current) {
+      byIdentity.set(key, t);
+      continue;
+    }
+    const currentDated = dayKeyOf(current.dueDate) !== null;
+    const tDated = dayKeyOf(t.dueDate) !== null;
+    byIdentity.set(key, !currentDated && tDated ? t : current);
+  }
   const floorKey = addDaysKey(budapestTodayKey(), -2);
-  return [...byId.values()]
+  return [...byIdentity.values()]
     .filter((t) => {
       const day = dayKeyOf(t.dueDate);
       return day === null || day >= floorKey;
@@ -239,6 +257,8 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
   const [moodleConnected, setMoodleConnected] = useState(false);
   const [filter, setFilter] = useState<TaskFilter>("All");
   const [moodleUrl, setMoodleUrl] = useState("");
+  const [savedMoodleUrl, setSavedMoodleUrl] = useState("");
+  const [moodleEditing, setMoodleEditing] = useState(false);
   const [moodleConnecting, setMoodleConnecting] = useState(false);
   const [moodleError, setMoodleError] = useState<string | null>(null);
   const [moodleSuccess, setMoodleSuccess] = useState<string | null>(null);
@@ -487,6 +507,8 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
         mergeTasks(prev, tagSource(data.tasks, "Moodle"), doneRef.current, snapshotKeysOf(doneTasksRef.current)),
       );
       setMoodleConnected(true);
+      setSavedMoodleUrl(url);
+      setMoodleEditing(false);
       window.localStorage.setItem(MOODLE_URL_KEY, url);
       if (!silent) {
         setMoodleError(null);
@@ -507,9 +529,27 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
     const saved = window.localStorage.getItem(MOODLE_URL_KEY);
     if (saved) {
       setMoodleUrl(saved);
+      setSavedMoodleUrl(saved);
       void connectMoodle(saved, true);
     }
   }, [isDemo, connectMoodle]);
+
+  // ── Moodle feed editing: the pen flips the saved card into edit mode ───────
+  const startMoodleEdit = useCallback(() => {
+    setMoodleUrl(savedMoodleUrl);
+    setMoodleError(null);
+    setMoodleSuccess(null);
+    setMoodleEditing(true);
+    // The input mounts after the state flip — focus it on the next frame.
+    window.setTimeout(() => moodleInputRef.current?.focus(), 50);
+  }, [savedMoodleUrl]);
+
+  const cancelMoodleEdit = useCallback(() => {
+    setMoodleUrl(savedMoodleUrl);
+    setMoodleError(null);
+    setMoodleSuccess(null);
+    setMoodleEditing(false);
+  }, [savedMoodleUrl]);
 
   // ── Mark done: fade out, then remove; undo brings it straight back ────────
   const markTaskDone = useCallback(
@@ -1123,53 +1163,91 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
 
           {/* ── Right rail ─────────────────────────────────────────────────── */}
           <aside aria-label="Sync status and Moodle calendar" className="space-y-4 lg:sticky lg:top-24 lg:self-start">
-            {/* Moodle calendar card */}
+            {/* Moodle calendar card — saved feeds show a pen to edit the link */}
             <div className="rounded-2xl border border-border bg-white p-5">
               <div className="flex items-center justify-between gap-2">
                 <h2 className="title-2 text-ink">Moodle calendar</h2>
-                <span
-                  className={cn(
-                    "caption-1 inline-flex items-center gap-1.5",
-                    moodleConnected ? "text-cat-medical" : "text-ink-3",
+                <div className="flex items-center gap-1">
+                  {moodleConnected && !moodleEditing && (
+                    <button
+                      type="button"
+                      onClick={startMoodleEdit}
+                      aria-label="Edit Moodle calendar URL"
+                      title="Edit Moodle calendar URL"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-ink-3 transition-colors duration-200 ease-base hover:bg-alt hover:text-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand active:scale-[0.98]"
+                    >
+                      <PencilSimple className="h-4 w-4" aria-hidden="true" />
+                    </button>
                   )}
-                >
-                  {moodleConnected && <CheckCircle className="h-4 w-4" aria-hidden="true" />}
-                  {moodleConnected ? "Connected" : "Not connected"}
-                </span>
+                  <span
+                    className={cn(
+                      "caption-1 inline-flex items-center gap-1.5",
+                      moodleConnected ? "text-cat-medical" : "text-ink-3",
+                    )}
+                  >
+                    {moodleConnected && <CheckCircle className="h-4 w-4" aria-hidden="true" />}
+                    {moodleConnected ? (moodleEditing ? "Editing" : "Connected") : "Not connected"}
+                  </span>
+                </div>
               </div>
               <p className="body-6 mt-2 text-ink-3">
                 Paste your private elearning.unideb.hu calendar feed once. It stays in your own browser.
               </p>
-              <div className="mt-4 space-y-2">
-                <Input
-                  ref={moodleInputRef}
-                  id="moodle-ics-input"
-                  value={moodleUrl}
-                  onChange={(e) => {
-                    setMoodleUrl(e.target.value);
-                    setMoodleError(null);
-                    setMoodleSuccess(null);
-                  }}
-                  placeholder="https://elearning.unideb.hu/calendar/export.php?..."
-                  aria-label="Moodle .ics calendar URL"
-                  className="caption-1 rounded-lg border-border bg-alt px-3 py-2 text-ink placeholder:text-ink-3"
-                />
-                {moodleError && (
-                  <p role="alert" className="caption-1 text-status-high">
-                    {moodleError}
+              {moodleConnected && !moodleEditing ? (
+                <div className="mt-4 rounded-xl border border-border bg-alt p-3">
+                  <p className="caption-4 text-ink-3">Saved calendar feed</p>
+                  <p className="caption-2 mt-1 break-all font-mono text-ink-2">
+                    {savedMoodleUrl || moodleUrl}
                   </p>
-                )}
-                {moodleSuccess && <p className="caption-1 text-cat-medical">{moodleSuccess}</p>}
-                <button
-                  type="button"
-                  onClick={() => void connectMoodle(moodleUrl)}
-                  disabled={moodleConnecting || !moodleUrl.trim()}
-                  className={cn(BUTTON_PRIMARY, "w-full")}
-                >
-                  <ArrowsClockwise className={cn("h-4 w-4", moodleConnecting && "animate-spin")} aria-hidden="true" />
-                  Save feed
-                </button>
-              </div>
+                  <p className="caption-4 mt-2 text-ink-3">
+                    Auto-fetches with every sync — click the pen to change the link.
+                  </p>
+                </div>
+              ) : (
+                <div className="mt-4 space-y-2">
+                  <Input
+                    ref={moodleInputRef}
+                    id="moodle-ics-input"
+                    value={moodleUrl}
+                    onChange={(e) => {
+                      setMoodleUrl(e.target.value);
+                      setMoodleError(null);
+                      setMoodleSuccess(null);
+                    }}
+                    placeholder="https://elearning.unideb.hu/calendar/export.php?..."
+                    aria-label="Moodle .ics calendar URL"
+                    className="caption-1 rounded-lg border-border bg-alt px-3 py-2 text-ink placeholder:text-ink-3"
+                  />
+                  {moodleError && (
+                    <p role="alert" className="caption-1 text-status-high">
+                      {moodleError}
+                    </p>
+                  )}
+                  {moodleSuccess && <p className="caption-1 text-cat-medical">{moodleSuccess}</p>}
+                  <button
+                    type="button"
+                    onClick={() => void connectMoodle(moodleUrl)}
+                    disabled={moodleConnecting || !moodleUrl.trim()}
+                    className={cn(BUTTON_PRIMARY, "w-full")}
+                  >
+                    <ArrowsClockwise
+                      className={cn("h-4 w-4", moodleConnecting && "animate-spin")}
+                      aria-hidden="true"
+                    />
+                    {moodleEditing ? "Update feed" : "Save feed"}
+                  </button>
+                  {moodleEditing && (
+                    <button
+                      type="button"
+                      onClick={cancelMoodleEdit}
+                      disabled={moodleConnecting}
+                      className={cn(BUTTON_SECONDARY, "w-full")}
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Conflict summary card */}
