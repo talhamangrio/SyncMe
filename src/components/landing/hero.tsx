@@ -1,14 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { motion, useReducedMotion } from "framer-motion";
-import { GraduationCap, Lock, ShieldCheck } from "@phosphor-icons/react/dist/ssr";
+import type { ReactNode } from "react";
 import Link from "next/link";
+import { motion, useReducedMotion } from "framer-motion";
+import { ArrowRight, GraduationCap, Lock, ShieldCheck } from "@phosphor-icons/react/dist/ssr";
 import { format } from "date-fns";
-import { ArrowRight } from "@phosphor-icons/react/dist/ssr";
 import { ConflictGroup, TaskCard } from "@/components/dashboard/task-card";
 import { GoogleMark } from "@/components/landing/google-mark";
-import { BASE_CURVE } from "@/components/landing/reveal";
+import { BASE_CURVE, MaskedLine } from "@/components/landing/reveal";
 import type { SyncTask } from "@/lib/types";
 
 const HERO_TASKS: SyncTask[] = [
@@ -54,33 +54,29 @@ const HERO_TASKS: SyncTask[] = [
   },
 ];
 
-const PROOF_ITEMS = [
-  { icon: Lock, label: "Read only Gmail access" },
-  { icon: ShieldCheck, label: "No emails stored on servers" },
-  { icon: GraduationCap, label: "Works with @unideb.hu accounts" },
+const TRUST_ITEMS = [
+  { icon: Lock, label: "Read only Gmail" },
+  { icon: ShieldCheck, label: "Zero email storage" },
+  { icon: GraduationCap, label: "@unideb.hu ready" },
 ];
 
 const PRIMARY_CTA =
-  "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-black px-3 py-2 button-md text-white transition-colors duration-300 ease-base hover:bg-[#262626] active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black";
+  "btn-primary inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-5 py-2.5 button-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
 
 const QUIET_LINK =
-  "caption-1 text-[#666666] underline-offset-4 transition-colors duration-300 ease-base hover:text-black hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black";
+  "caption-1 text-ink-3 underline-offset-4 transition-colors duration-300 ease-base hover:text-ink hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
 
-/** A card in the preview settles in 60ms after the previous one, once. */
-function PreviewCard({ task, index, doneIds, onToggle }: { task: SyncTask; index: number; doneIds: Set<string>; onToggle: (id: string) => void }) {
+/** A row in the preview settles in 60ms after the previous one, once. */
+function PreviewRow({ index, children }: { index: number; children: ReactNode }) {
   const reduce = useReducedMotion();
   return (
     <motion.div
-      initial={reduce ? { opacity: 0 } : { opacity: 0, y: 16 }}
+      initial={reduce ? { opacity: 0 } : { opacity: 0, y: 12 }}
       whileInView={reduce ? { opacity: 1 } : { opacity: 1, y: 0 }}
       viewport={{ once: true }}
-      transition={{ duration: 0.5, ease: BASE_CURVE, delay: 0.3 + index * 0.06 }}
+      transition={{ duration: 0.5, ease: BASE_CURVE, delay: 0.85 + index * 0.06 }}
     >
-      <TaskCard
-        task={task}
-        done={doneIds.has(task.id)}
-        onToggleDone={(t) => onToggle(t.id)}
-      />
+      {children}
     </motion.div>
   );
 }
@@ -96,32 +92,44 @@ export function Hero({ signedIn = false, authBanner }: { signedIn?: boolean; aut
       return next;
     });
 
+  const reduce = useReducedMotion();
   const [conflictA, conflictB, quiz, clinic] = HERO_TASKS;
 
   return (
     <section className="px-4 pb-16 pt-28 sm:px-6 sm:pb-24 sm:pt-36">
-      <motion.div
-        initial={{ opacity: 0, y: 18 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: BASE_CURVE }}
-        className="mx-auto max-w-[680px] text-center"
-      >
-        <p className="caption-1 inline-flex items-center gap-2 text-[#666666]">
-          <GraduationCap className="h-4 w-4" aria-hidden="true" />
-          Built for University of Debrecen students
-        </p>
-        <h1 className="heading-1 mt-4 bg-gradient-to-r from-black to-[#666666] bg-clip-text text-transparent">
-          Your student admin,
-          <br />
-          on autopilot.
+      <div className="mx-auto max-w-[720px] text-center">
+        {/* Eyebrow pill */}
+        <motion.p
+          initial={reduce ? { opacity: 0 } : { opacity: 0, y: 18 }}
+          animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: BASE_CURVE }}
+          className="inline-flex items-center gap-2 rounded-full border border-border bg-white/70 px-3 py-1 caption-4 text-ink-2"
+        >
+          <GraduationCap className="h-3.5 w-3.5 text-brand" aria-hidden="true" />
+          For University of Debrecen students
+        </motion.p>
+
+        <h1 className="mt-5 font-semibold tracking-tight text-ink text-[36px] leading-[1.12] sm:text-[48px] sm:leading-[1.08] md:text-[60px] md:leading-[1.06]">
+          <MaskedLine mode="load" delay={0.05}>Your student admin,</MaskedLine>
+          <MaskedLine mode="load" delay={0.15}>
+            <span className="text-gradient-brand">on autopilot.</span>
+          </MaskedLine>
         </h1>
-        <p className="title-1 mt-4 text-[#666666]">
-          SyncMe reads your Gmail and Moodle calendar, finds every exam, quiz, appointment and deadline,
-          and tells you what to do next. Sorted by priority and checked for conflicts.
+
+        <p className="mt-5 text-base leading-6 text-ink-2 sm:text-lg sm:leading-7">
+          <MaskedLine mode="load" delay={0.25}>
+            SyncMe scans Gmail and Moodle to turn buried exams, clinic visits, and deadlines into one
+            conflict-checked plan.
+          </MaskedLine>
         </p>
 
         {/* One primary action above the fold; the demo sandbox is a quiet link */}
-        <div className="mt-8 flex flex-col items-center gap-3">
+        <motion.div
+          initial={reduce ? { opacity: 0 } : { opacity: 0, y: 24 }}
+          animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: BASE_CURVE, delay: 0.5 }}
+          className="mt-8 flex flex-col items-center gap-3"
+        >
           {signedIn ? (
             <Link href="/dashboard" className={PRIMARY_CTA}>
               Open my dashboard
@@ -134,53 +142,75 @@ export function Hero({ signedIn = false, authBanner }: { signedIn?: boolean; aut
             </a>
           )}
           <a href="/api/demo/enter" className={QUIET_LINK}>
-            Or explore the demo sandbox
+            Try the live demo sandbox
           </a>
-        </div>
+        </motion.div>
 
         {authBanner ? (
-          <p role="alert" className="mt-6 rounded-lg border border-status-high bg-status-high-bg px-4 py-3 body-6 text-status-high">
+          <p
+            role="alert"
+            className="mt-6 rounded-lg border border-status-high bg-status-high-bg px-4 py-3 body-6 text-status-high"
+          >
             {authBanner}
           </p>
         ) : null}
 
-        <p className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
-          {PROOF_ITEMS.map((item) => (
-            <span key={item.label} className="caption-1 inline-flex items-center gap-1.5 text-[#666666]">
+        {/* Trust line */}
+        <motion.p
+          initial={reduce ? { opacity: 0 } : { opacity: 0, y: 16 }}
+          animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: BASE_CURVE, delay: 0.56 }}
+          className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2"
+        >
+          {TRUST_ITEMS.map((item) => (
+            <span key={item.label} className="caption-1 inline-flex items-center gap-1.5 text-ink-3">
               <item.icon className="h-4 w-4" aria-hidden="true" />
               {item.label}
             </span>
           ))}
-        </p>
-      </motion.div>
+        </motion.p>
+      </div>
 
       {/* Framed dashboard preview: real task cards, marked as demo data */}
       <motion.div
-        initial={{ opacity: 0, y: 32 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.75, ease: BASE_CURVE, delay: 0.2 }}
-        className="mx-auto mt-16 max-w-4xl rounded-2xl border border-border bg-alt p-2"
+        initial={reduce ? { opacity: 0 } : { opacity: 0, y: 24 }}
+        animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0 }}
+        transition={{ duration: 0.7, ease: BASE_CURVE, delay: 0.62 }}
+        className="mx-auto mt-14 w-full max-w-4xl overflow-hidden rounded-2xl border border-border bg-white shadow-[0_24px_48px_-24px_rgba(37,99,235,0.25)]"
+        role="region"
         aria-label="Demo dashboard preview"
       >
-        <div className="rounded-lg border border-border bg-white p-4 sm:p-6">
+        {/* Browser chrome */}
+        <div className="flex items-center gap-2 border-b border-border bg-alt/60 px-4 py-3">
+          <span aria-hidden="true" className="flex items-center gap-2">
+            <span className="h-2.5 w-2.5 rounded-full bg-line-strong" />
+            <span className="h-2.5 w-2.5 rounded-full bg-line-strong" />
+            <span className="h-2.5 w-2.5 rounded-full bg-line-strong" />
+          </span>
+          <span className="mx-auto rounded-md border border-border bg-white px-3 py-1 caption-4 text-ink-3">
+            SyncMe dashboard
+          </span>
+        </div>
+
+        {/* Preview body */}
+        <div className="p-3 sm:p-5">
           <div className="flex items-center justify-between px-1 pb-3">
-            <p className="title-3 text-black">Today</p>
-            <span className="caption-4 rounded-full bg-inset px-2 py-1 text-[#666666]">Demo data</span>
+            <p className="title-4 text-ink">Today</p>
+            <span className="caption-4 rounded-full bg-alt px-2 py-1 text-ink-3">Demo data</span>
           </div>
           <div className="space-y-2">
-            <motion.div
-              initial={{ opacity: 0, y: 16 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.5, ease: BASE_CURVE, delay: 0.3 }}
-            >
-              <ConflictGroup dateLabel={format(new Date("2026-12-09T17:00:00"), "EEEE d MMM")} count={2}>
-                <TaskCard task={conflictA} compactRadius done={doneIds.has(conflictA.id)} onToggleDone={(t) => toggle(t.id)} />
-                <TaskCard task={conflictB} compactRadius done={doneIds.has(conflictB.id)} onToggleDone={(t) => toggle(t.id)} />
+            <PreviewRow index={0}>
+              <ConflictGroup dateLabel={format(new Date(conflictA.dueDate), "EEEE d MMM")} count={2}>
+                <TaskCard task={conflictA} done={doneIds.has(conflictA.id)} onToggleDone={(t) => toggle(t.id)} />
+                <TaskCard task={conflictB} done={doneIds.has(conflictB.id)} onToggleDone={(t) => toggle(t.id)} />
               </ConflictGroup>
-            </motion.div>
-            <PreviewCard task={quiz} index={0} doneIds={doneIds} onToggle={toggle} />
-            <PreviewCard task={clinic} index={1} doneIds={doneIds} onToggle={toggle} />
+            </PreviewRow>
+            <PreviewRow index={1}>
+              <TaskCard task={quiz} done={doneIds.has(quiz.id)} onToggleDone={(t) => toggle(t.id)} />
+            </PreviewRow>
+            <PreviewRow index={2}>
+              <TaskCard task={clinic} done={doneIds.has(clinic.id)} onToggleDone={(t) => toggle(t.id)} />
+            </PreviewRow>
           </div>
         </div>
       </motion.div>

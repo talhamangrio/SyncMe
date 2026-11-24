@@ -10,20 +10,20 @@ export default function NotFound() {
         <Logo />
         <span
           aria-hidden="true"
-          className="flex h-12 w-12 items-center justify-center rounded-full border border-border bg-alt text-[#666666]"
+          className="flex h-12 w-12 items-center justify-center rounded-full border border-border bg-alt text-ink-3"
         >
           <Compass className="h-5 w-5" />
         </span>
         <div className="max-w-md">
-          <h1 className="heading-3 text-black">This page took a detour.</h1>
-          <p className="body-3 mt-4 text-[#666666]">
+          <h1 className="heading-3 text-ink">This page took a detour.</h1>
+          <p className="body-3 mt-4 text-ink-3">
             The page you are looking for does not exist or moved. Your deadlines, however, are exactly
             where you left them.
           </p>
         </div>
         <Link
           href="/"
-          className="inline-flex items-center justify-center rounded-lg border border-border bg-white px-3 py-2 button-md text-black transition-colors duration-300 ease-base hover:bg-alt active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+          className="inline-flex items-center justify-center rounded-lg border border-border bg-white px-4 py-2 button-md btn-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
         >
           Back to home
         </Link>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { format } from "date-fns";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { ConflictGroup, TaskCard, formatTaskDue } from "@/components/dashboard/task-card";
+import { CATEGORY_ICONS, ConflictGroup, TaskCard, formatTaskDue } from "@/components/dashboard/task-card";
 import { Logo } from "@/components/logo";
 import { SiteFooter } from "@/components/site-footer";
 import { BASE_CURVE } from "@/components/landing/reveal";
@@ -32,7 +32,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { DEMO_DONE, DEMO_EMAILS, DEMO_TASKS } from "@/lib/demo-data";
 import { addDaysKey, budapestTodayKey, dayKeyOf, normalizeDueDate, sortChronologically } from "@/lib/dates";
 import type { GmailSyncResponse, MoodleSyncResponse, RawEmail, SyncMeUser, SyncTask, TaskCategory } from "@/lib/types";
-import { TASK_CATEGORIES } from "@/lib/types";
+import { PRIORITY_UI, TASK_CATEGORIES } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const POLL_INTERVAL_MS = 30_000;
@@ -124,22 +124,22 @@ function isValidHttpsUrl(url: string): boolean {
 
 /** Button classes reused across the dashboard. */
 const BUTTON_PRIMARY =
-  "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-black px-3 py-2 button-md text-white transition-colors duration-300 ease-base hover:bg-[#262626] active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:pointer-events-none disabled:opacity-50";
+  "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-transparent px-3 py-2 button-md btn-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:pointer-events-none disabled:opacity-50";
 const BUTTON_SECONDARY =
-  "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-white px-3 py-2 button-md text-black transition-colors duration-300 ease-base hover:bg-alt active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:pointer-events-none disabled:opacity-50";
+  "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-white px-3 py-2 button-md text-ink btn-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:pointer-events-none disabled:opacity-50";
 
-/** Skeleton shaped exactly like the real task card, slow opacity pulse. */
-function TaskCardSkeleton() {
+/** Skeleton shaped exactly like a real compact task row, slow opacity pulse. */
+function TaskRowSkeleton() {
   return (
-    <div aria-hidden="true" className="flex items-start gap-3 rounded-2xl border border-border bg-white p-4">
-      <span className="skeleton-soft mt-1 h-6 w-6 shrink-0 rounded-full bg-inset" />
-      <span className="skeleton-soft h-10 w-10 shrink-0 rounded-full bg-inset" />
-      <div className="min-w-0 flex-1 space-y-2">
-        <span className="skeleton-soft block h-4 w-1/3 rounded bg-inset" />
-        <span className="skeleton-soft block h-3 w-2/3 rounded bg-inset" />
-        <span className="skeleton-soft block h-3 w-1/2 rounded bg-inset" />
+    <div aria-hidden="true" className="flex items-center gap-3 rounded-xl border border-border bg-white px-4 py-3">
+      <span className="skeleton-soft h-5 w-5 shrink-0 rounded-full bg-alt" />
+      <span className="skeleton-soft h-7 w-7 shrink-0 rounded-lg bg-alt" />
+      <div className="min-w-0 flex-1 space-y-1.5">
+        <span className="skeleton-soft block h-4 w-1/3 rounded bg-alt" />
+        <span className="skeleton-soft block h-3 w-2/3 rounded bg-alt" />
       </div>
-      <span className="skeleton-soft h-5 w-16 shrink-0 rounded-full bg-inset" />
+      <span className="skeleton-soft hidden h-3 w-24 shrink-0 rounded bg-alt sm:block" />
+      <span className="skeleton-soft h-5 w-14 shrink-0 rounded-full bg-alt" />
     </div>
   );
 }
@@ -170,13 +170,7 @@ function TaskRow({
       }}
       className="list-none"
     >
-      <TaskCard
-        task={task}
-        onOpen={onOpen}
-        onToggleDone={onToggleDone}
-        done={completing}
-        showUrgency
-      />
+      <TaskCard task={task} onOpen={onOpen} onToggleDone={onToggleDone} done={completing} showUrgency />
     </motion.li>
   );
 }
@@ -536,21 +530,7 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
   const firstName = user.name.trim().split(/\s+/)[0] || "there";
   const weekTotal = dueTodayCount + next7Count;
 
-  // ── Segmented filter: measured sliding indicator (transform based) ────────
   const FILTERS = useMemo(() => ["All", ...TASK_CATEGORIES] as const, []);
-  const activeIndex = FILTERS.indexOf(filter);
-  const segRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const [indicator, setIndicator] = useState({ left: 0, width: 0 });
-
-  useLayoutEffect(() => {
-    const measure = () => {
-      const el = segRefs.current[activeIndex];
-      if (el) setIndicator({ left: el.offsetLeft, width: el.offsetWidth });
-    };
-    measure();
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
-  }, [activeIndex, filter]);
 
   const syncLabel = useMemo(() => {
     if (!lastSync) return isDemo ? "Demo mode" : connected ? "Ready" : "Not connected";
@@ -569,7 +549,7 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
     moodleInputRef.current?.focus();
   };
 
-  /** Renders a group's cards, wrapping consecutive same day pairs in a conflict container. */
+  /** Renders a group's rows, wrapping consecutive same day pairs in a conflict container. */
   const renderGroupItems = (items: SyncTask[]): React.ReactNode[] => {
     const runs: { day: string | null; items: SyncTask[] }[] = [];
     for (const t of items) {
@@ -617,19 +597,19 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
     <div className="flex min-h-screen flex-col bg-background text-foreground">
       {/* ── Floating dashboard navigation ──────────────────────────────────── */}
       <header className="fixed inset-x-0 top-0 z-50 px-4 pt-4">
-        <div className="mx-auto flex w-fit items-center gap-2 rounded-2xl border border-border bg-white/80 py-1.5 pl-3 pr-2 shadow-sm backdrop-blur-md">
+        <div className="glass-nav mx-auto flex w-fit items-center gap-2 rounded-2xl border border-border py-1.5 pl-3 pr-2 shadow-sm">
           <Logo />
           <span aria-hidden="true" className="hidden h-5 w-px bg-border sm:block" />
-          <span className="caption-3 hidden rounded-full bg-black px-2.5 py-1 text-white sm:inline-flex">Dashboard</span>
+          <span className="caption-3 hidden rounded-full bg-brand px-2.5 py-1 text-white sm:inline-flex">Dashboard</span>
           <span
             suppressHydrationWarning
-            className="caption-4 hidden min-[480px]:inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[#666666]"
+            className="caption-4 hidden min-[480px]:inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-ink-3"
           >
             <ArrowsClockwise className="h-3.5 w-3.5" aria-hidden="true" />
             {syncLabel}
           </span>
           {isDemo && (
-            <span className="caption-4 inline-flex items-center gap-1.5 rounded-full border border-border px-2 py-1 text-[#666666]">
+            <span className="caption-4 inline-flex items-center gap-1.5 rounded-full border border-border px-2 py-1 text-ink-3">
               <Flask className="h-3.5 w-3.5" aria-hidden="true" />
               Demo
             </span>
@@ -638,7 +618,7 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
             type="button"
             onClick={() => setEmailsOpen(true)}
             aria-label="Open raw emails"
-            className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-[#666666] transition-colors duration-300 ease-base hover:bg-alt hover:text-black focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black active:scale-[0.98]"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-ink-3 transition-colors duration-300 ease-base hover:bg-alt hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand active:scale-[0.98]"
           >
             <List className="h-4 w-4" aria-hidden="true" />
           </button>
@@ -647,21 +627,21 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
               <button
                 type="button"
                 aria-label="Account menu"
-                className="inline-flex h-11 w-11 items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+                className="inline-flex h-11 w-11 items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
               >
                 <Avatar className="h-9 w-9 border border-border">
                   {user.picture ? <AvatarImage src={user.picture} alt={`${user.name}'s profile photo`} /> : null}
-                  <AvatarFallback className="bg-inset caption-3 text-black">{initialsOf(user.name)}</AvatarFallback>
+                  <AvatarFallback className="caption-3 bg-alt text-ink">{initialsOf(user.name)}</AvatarFallback>
                 </Avatar>
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56 rounded-lg border-border">
+            <DropdownMenuContent align="end" className="w-56 rounded-xl border-border">
               <DropdownMenuLabel className="py-2">
-                <span className="caption-3 block truncate text-black">{user.name}</span>
-                <span className="caption-4 block truncate text-[#666666]">{user.email}</span>
+                <span className="caption-3 block truncate text-ink">{user.name}</span>
+                <span className="caption-4 block truncate text-ink-3">{user.email}</span>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => void logout()} className="gap-2 caption-1">
+              <DropdownMenuItem onClick={() => void logout()} className="caption-1 gap-2">
                 <SignOut className="h-4 w-4" aria-hidden="true" />
                 Log out
               </DropdownMenuItem>
@@ -674,13 +654,13 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
         {/* ── Demo banner ──────────────────────────────────────────────────── */}
         {isDemo && (
           <div className="mb-6 flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-alt px-4 py-3">
-            <Flask className="h-4 w-4 shrink-0 text-[#666666]" aria-hidden="true" />
-            <p className="body-6 text-[#666666]">
-              <span className="font-semibold text-black">Demo sandbox.</span> Simulated Debrecen inbox. No Gmail
+            <Flask className="h-4 w-4 shrink-0 text-ink-3" aria-hidden="true" />
+            <p className="body-6 text-ink-3">
+              <span className="font-semibold text-ink">Demo sandbox.</span> Simulated Debrecen inbox. No Gmail
               account is connected;{" "}
               <a
                 href="/api/auth/google"
-                className="underline underline-offset-4 transition-colors duration-300 ease-base hover:text-black"
+                className="font-medium text-brand underline underline-offset-4 transition-colors duration-300 ease-base hover:text-brand-deep"
               >
                 connect real Gmail
               </a>{" "}
@@ -710,17 +690,17 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
 
         {/* ── Greeting ─────────────────────────────────────────────────────── */}
         <header>
-          <h1 suppressHydrationWarning className="heading-5 text-black">
+          <h1 suppressHydrationWarning className="heading-5 text-ink">
             {greetingOf(new Date())}, {firstName}
           </h1>
-          <p suppressHydrationWarning className="body-3 mt-1 text-[#666666]">
+          <p suppressHydrationWarning className="body-3 mt-1 text-ink-3">
             You have {weekTotal} task{weekTotal === 1 ? "" : "s"} due this week and {conflictMap.size} conflict
             {conflictMap.size === 1 ? "" : "s"}.
           </p>
         </header>
 
         {/* ── Summary tiles ────────────────────────────────────────────────── */}
-        <div className="mt-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="mt-8 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
           {[
             { label: "Due today", value: dueTodayCount, icon: null, iconClass: "" },
             { label: "Next 7 days", value: next7Count, icon: null, iconClass: "" },
@@ -728,11 +708,11 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
             { label: "Done this week", value: doneThisWeek, icon: CheckCircle, iconClass: "text-cat-medical" },
           ].map((tile) => (
             <div key={tile.label} className="rounded-2xl border border-border bg-white p-4">
-              <p className="caption-1 inline-flex items-center gap-1.5 text-[#666666]">
+              <p className="caption-1 inline-flex items-center gap-1.5 text-ink-3">
                 {tile.icon && <tile.icon className={cn("h-4 w-4", tile.iconClass)} aria-hidden="true" />}
                 {tile.label}
               </p>
-              <p suppressHydrationWarning className="heading-4 mt-2 text-black">
+              <p suppressHydrationWarning className="mt-2 font-mono text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
                 {tile.value}
               </p>
             </div>
@@ -742,32 +722,35 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
         {/* ── Main column + right rail ─────────────────────────────────────── */}
         <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div className="space-y-6 lg:col-span-2">
-            {/* ── Segmented filter ─────────────────────────────────────────── */}
-            <div role="group" aria-label="Filter tasks by category" className="-mx-4 overflow-x-auto px-4 scrollbar-slim sm:mx-0 sm:px-0">
-              <div className="relative flex w-max gap-1 rounded-lg bg-inset p-1 sm:w-full">
-                <span
-                  aria-hidden="true"
-                  className="absolute bottom-1 top-1 left-0 rounded-md border border-border bg-white transition-transform duration-500 ease-base"
-                  style={{ width: indicator.width, transform: `translateX(${indicator.left}px)` }}
-                />
-                {FILTERS.map((c, i) => {
+            {/* ── Segmented pill filter bar ─────────────────────────────────── */}
+            <div
+              role="group"
+              aria-label="Filter tasks by category"
+              className="-mx-4 overflow-x-auto px-4 pb-1 scrollbar-slim sm:mx-0 sm:px-0 sm:pb-0"
+            >
+              <div className="inline-flex max-w-full items-center gap-1 rounded-xl border border-border bg-alt p-1">
+                {FILTERS.map((c) => {
                   const selected = filter === c;
+                  const CatIcon = c === "All" ? null : CATEGORY_ICONS[c];
                   return (
                     <button
                       key={c}
-                      ref={(el) => {
-                        segRefs.current[i] = el;
-                      }}
                       type="button"
                       onClick={() => setFilter(c)}
                       aria-pressed={selected}
                       className={cn(
-                        "relative z-10 flex min-h-9 items-center gap-1.5 whitespace-nowrap rounded-md px-3 button-sm transition-colors duration-300 ease-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black sm:flex-1 sm:justify-center",
-                        selected ? "text-black" : "text-[#666666] hover:text-black",
+                        "inline-flex min-h-9 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm font-medium transition-colors duration-200 ease-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand",
+                        selected ? "bg-white text-ink shadow-xs ring-1 ring-line" : "text-ink-2 hover:text-ink",
                       )}
                     >
+                      {CatIcon && <CatIcon className="h-3.5 w-3.5" aria-hidden="true" />}
                       {c}
-                      <span className={cn("caption-4", selected ? "text-[#666666]" : "text-[#999999]")}>
+                      <span
+                        className={cn(
+                          "rounded-full px-1.5 py-0.5 text-xs leading-4",
+                          selected ? "bg-alt text-ink-3" : "bg-[#E2E8F0] text-ink-2",
+                        )}
+                      >
                         {categoryCounts.get(c) ?? 0}
                       </span>
                     </button>
@@ -779,21 +762,21 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
             {/* ── Date groups ──────────────────────────────────────────────── */}
             <section aria-label="Tasks by date">
               {showSkeletons ? (
-                <div className="space-y-4">
+                <div className="space-y-2">
                   {Array.from({ length: 4 }).map((_, i) => (
-                    <TaskCardSkeleton key={i} />
+                    <TaskRowSkeleton key={i} />
                   ))}
                 </div>
               ) : dateGroups.length === 0 ? (
                 <div className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-white px-4 py-12 text-center">
                   <span
                     aria-hidden="true"
-                    className="flex h-12 w-12 items-center justify-center rounded-full bg-alt text-[#666666]"
+                    className="flex h-12 w-12 items-center justify-center rounded-full bg-alt text-ink-3"
                   >
                     <CheckCircle className="h-6 w-6" />
                   </span>
-                  <h2 className="heading-5 text-black">Nothing due this week</h2>
-                  <p className="body-3 max-w-sm text-[#666666]">
+                  <h2 className="title-1 text-ink">Nothing due this week</h2>
+                  <p className="body-3 max-w-sm text-ink-3">
                     New deadlines appear here as soon as they land in your inbox or Moodle.
                   </p>
                   {!moodleConnected && (
@@ -806,13 +789,13 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
                 <div className="space-y-8">
                   {dateGroups.map((group) => (
                     <div key={group.key}>
-                      <div className="sticky top-20 z-20 -mx-4 flex items-center gap-2 bg-white/95 px-4 py-2 backdrop-blur-sm sm:-mx-6 sm:px-6">
-                        <h3 className="title-4 text-black">{group.label}</h3>
-                        <span className="caption-4 rounded-full bg-inset px-2 py-0.5 text-[#666666]">
+                      <div className="sticky top-[72px] z-20 -mx-4 mb-2 flex items-center gap-2 border-b border-border bg-page/85 px-4 pb-1.5 backdrop-blur-sm sm:-mx-6 sm:px-6">
+                        <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-3">{group.label}</h3>
+                        <span className="rounded-full bg-alt px-2 py-0.5 text-xs leading-4 text-ink-3">
                           {group.items.length}
                         </span>
                       </div>
-                      <ul className="mt-3 space-y-2">{renderGroupItems(group.items)}</ul>
+                      <ul className="space-y-2">{renderGroupItems(group.items)}</ul>
                     </div>
                   ))}
                 </div>
@@ -823,20 +806,20 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
           {/* ── Right rail ─────────────────────────────────────────────────── */}
           <aside aria-label="Sync status and Moodle calendar" className="space-y-4 lg:sticky lg:top-24 lg:self-start">
             {/* Moodle calendar card */}
-            <div className="rounded-2xl border border-border bg-white p-6">
+            <div className="rounded-2xl border border-border bg-white p-5">
               <div className="flex items-center justify-between gap-2">
-                <h2 className="title-2 text-black">Moodle calendar</h2>
+                <h2 className="title-2 text-ink">Moodle calendar</h2>
                 <span
                   className={cn(
                     "caption-1 inline-flex items-center gap-1.5",
-                    moodleConnected ? "text-cat-medical" : "text-[#666666]",
+                    moodleConnected ? "text-cat-medical" : "text-ink-3",
                   )}
                 >
                   {moodleConnected && <CheckCircle className="h-4 w-4" aria-hidden="true" />}
                   {moodleConnected ? "Connected" : "Not connected"}
                 </span>
               </div>
-              <p className="body-6 mt-2 text-[#666666]">
+              <p className="body-6 mt-2 text-ink-3">
                 Paste your private elearning.unideb.hu calendar feed once. It stays in your own browser.
               </p>
               <div className="mt-4 space-y-2">
@@ -851,7 +834,7 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
                   }}
                   placeholder="https://elearning.unideb.hu/calendar/export.php?..."
                   aria-label="Moodle .ics calendar URL"
-                  className="rounded-lg border-border bg-inset px-3 py-2 caption-1 text-black placeholder:text-[#666666] focus-visible:ring-black"
+                  className="caption-1 rounded-lg border-border bg-alt px-3 py-2 text-ink placeholder:text-ink-3"
                 />
                 {moodleError && (
                   <p role="alert" className="caption-1 text-status-high">
@@ -872,36 +855,36 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
             </div>
 
             {/* Conflict summary card */}
-            <div className="rounded-2xl border border-border bg-white p-6">
-              <h2 className="title-2 text-black">Conflict radar</h2>
+            <div className="rounded-2xl border border-border bg-white p-5">
+              <h2 className="title-2 text-ink">Conflict radar</h2>
               {nextConflict ? (
-                <div className="mt-3 rounded-lg border border-status-warn-border bg-status-warn-bg p-4">
+                <div className="mt-3 rounded-xl border border-status-warn-border bg-status-warn-bg p-4">
                   <p className="caption-3 inline-flex items-center gap-2 text-status-warn">
                     <WarningCircle className="h-4 w-4" aria-hidden="true" />
                     Schedule conflict
                   </p>
-                  <p className="caption-1 mt-1 text-[#666666]">
+                  <p className="caption-1 mt-1 text-ink-3">
                     {nextConflict[1].length} deadlines on {format(new Date(`${nextConflict[0]}T12:00:00`), "EEEE d MMM")}
                   </p>
                   <ul className="mt-2 space-y-1">
                     {nextConflict[1].map((t) => (
-                      <li key={t.id} className="caption-4 truncate text-[#666666]">
+                      <li key={t.id} className="caption-4 truncate text-ink-2">
                         {t.title}
                       </li>
                     ))}
                   </ul>
                 </div>
               ) : (
-                <p className="body-6 mt-2 text-[#666666]">No conflicts in your schedule right now.</p>
+                <p className="body-6 mt-2 text-ink-3">No conflicts in your schedule right now.</p>
               )}
             </div>
 
             {/* Sync status card */}
-            <div className="rounded-2xl border border-border bg-white p-6">
-              <h2 className="title-2 text-black">Sync status</h2>
+            <div className="rounded-2xl border border-border bg-white p-5">
+              <h2 className="title-2 text-ink">Sync status</h2>
               <dl className="mt-3 space-y-2">
                 <div className="flex items-center justify-between gap-2">
-                  <dt className="caption-1 text-[#666666]">Gmail</dt>
+                  <dt className="caption-1 text-ink-3">Gmail</dt>
                   <dd
                     className={cn(
                       "caption-1 inline-flex items-center gap-1.5",
@@ -913,18 +896,18 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
                   </dd>
                 </div>
                 <div className="flex items-center justify-between gap-2">
-                  <dt className="caption-1 text-[#666666]">Moodle</dt>
-                  <dd className="caption-1 text-black">{moodleConnected ? `${moodleTasks.length} events` : "Not connected"}</dd>
+                  <dt className="caption-1 text-ink-3">Moodle</dt>
+                  <dd className="caption-1 text-ink">{moodleConnected ? `${moodleTasks.length} events` : "Not connected"}</dd>
                 </div>
                 <div className="flex items-center justify-between gap-2">
-                  <dt className="caption-1 text-[#666666]">Extractor</dt>
-                  <dd className="caption-1 text-black">
+                  <dt className="caption-1 text-ink-3">Extractor</dt>
+                  <dd className="caption-1 text-ink">
                     {isDemo ? "Demo data" : engine === "gemini" ? "Gemini" : engine === "zai" ? "GLM" : engine === "rule" ? "Rule engine" : "—"}
                   </dd>
                 </div>
                 <div className="flex items-center justify-between gap-2">
-                  <dt className="caption-1 text-[#666666]">Last sync</dt>
-                  <dd suppressHydrationWarning className="caption-1 font-mono text-black">
+                  <dt className="caption-1 text-ink-3">Last sync</dt>
+                  <dd suppressHydrationWarning className="caption-1 font-mono text-ink">
                     {lastSync ? format(lastSync, "HH:mm:ss") : "—"}
                   </dd>
                 </div>
@@ -948,17 +931,17 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
             </div>
 
             {/* Privacy note */}
-            <div className="rounded-2xl border border-border bg-white p-6">
-              <h2 className="title-2 inline-flex items-center gap-2 text-black">
+            <div className="rounded-2xl border border-border bg-white p-5">
+              <h2 className="title-2 inline-flex items-center gap-2 text-ink">
                 <ShieldCheck className="h-4 w-4 text-cat-medical" aria-hidden="true" />
                 Read only, zero storage
               </h2>
-              <p className="body-6 mt-2 text-[#666666]">
+              <p className="body-6 mt-2 text-ink-3">
                 SyncMe uses gmail.readonly solely to extract student deadlines. Emails are fetched on demand and
                 never stored or sold.{" "}
                 <a
                   href="/privacy"
-                  className="underline underline-offset-4 transition-colors duration-300 ease-base hover:text-black"
+                  className="underline underline-offset-4 transition-colors duration-300 ease-base hover:text-ink"
                 >
                   Privacy policy
                 </a>
@@ -980,26 +963,31 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
           {drawerTask && (
             <>
               <SheetHeader className="p-0 text-left">
-                <SheetTitle className="heading-5 text-black">{drawerTask.title}</SheetTitle>
-                <SheetDescription className="caption-1 mt-1 text-[#666666]">
+                <SheetTitle className="heading-5 text-ink">{drawerTask.title}</SheetTitle>
+                <SheetDescription className="caption-1 mt-1 text-ink-3">
                   {drawerEmail ? `${drawerEmail.from} · ${formatTaskDue(drawerEmail.date)}` : drawerTask.sourceEmailSubject}
                 </SheetDescription>
               </SheetHeader>
-              <div className="mt-6 rounded-lg bg-inset p-4">
-                <p className="caption-4 text-[#666666]">Due date</p>
-                <p className="caption-1 mt-0.5 font-mono text-black">{formatTaskDue(drawerTask.dueDate)}</p>
-                <p className="caption-4 mt-3 text-[#666666]">Priority</p>
+              <div className="mt-6 rounded-xl bg-alt p-4">
+                <p className="caption-4 text-ink-3">Due date</p>
+                <p className="caption-1 mt-0.5 font-mono text-ink">{formatTaskDue(drawerTask.dueDate)}</p>
+                <p className="caption-4 mt-3 text-ink-3">Priority</p>
                 <p className="mt-0.5">
-                  <span className={cn("caption-3 inline-flex items-center gap-1 rounded-full px-2 py-1", drawerTask.priority === "High" ? "bg-status-high-bg text-status-high" : drawerTask.priority === "Medium" ? "bg-status-warn-bg text-status-warn" : "bg-status-low-bg text-status-low")}>
+                  <span
+                    className={cn(
+                      "caption-3 inline-flex items-center gap-1 rounded-full px-2 py-1",
+                      PRIORITY_UI[drawerTask.priority].pill,
+                    )}
+                  >
                     {drawerTask.priority}
                   </span>
                 </p>
-                <p className="caption-4 mt-3 text-[#666666]">Action summary</p>
-                <p className="body-6 mt-0.5 text-black">{drawerTask.actionSummary}</p>
+                <p className="caption-4 mt-3 text-ink-3">Action summary</p>
+                <p className="body-6 mt-0.5 text-ink">{drawerTask.actionSummary}</p>
               </div>
-              <div className="mt-4 rounded-lg bg-alt p-4">
-                <p className="caption-4 text-[#666666]">Source email</p>
-                <pre className="scrollbar-slim caption-1 mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap font-mono text-[#666666]">
+              <div className="mt-4 rounded-xl bg-alt p-4">
+                <p className="caption-4 text-ink-3">Source email</p>
+                <pre className="scrollbar-slim caption-1 mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap font-mono text-ink-2">
                   {drawerEmail ? drawerEmail.snippet : drawerTask.sourceEmailSubject}
                 </pre>
               </div>
@@ -1034,26 +1022,24 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
           )}
         >
           <SheetHeader className="p-0 text-left">
-            <SheetTitle className="heading-5 text-black">Raw emails</SheetTitle>
-            <SheetDescription className="caption-1 mt-1 text-[#666666]">
+            <SheetTitle className="heading-5 text-ink">Raw emails</SheetTitle>
+            <SheetDescription className="caption-1 mt-1 text-ink-3">
               Last 30 days, academic, educational, immigration, health and professional mail only. Fetched live,
               never stored on servers.
             </SheetDescription>
           </SheetHeader>
           <div className="scrollbar-slim mt-6 space-y-3 overflow-y-auto pb-6">
             {emails.length === 0 && (
-              <p className="caption-1 py-8 text-center text-[#666666]">
-                No emails scanned yet — run a Gmail sync first.
-              </p>
+              <p className="caption-1 py-8 text-center text-ink-3">No emails scanned yet — run a Gmail sync first.</p>
             )}
             {emails.map((e) => (
-              <div key={e.id} className="rounded-lg border border-border bg-white p-3">
-                <p className="body-6 font-medium text-black">{e.subject}</p>
-                <p className="caption-4 mt-1 truncate text-[#666666]">{e.from}</p>
-                <p suppressHydrationWarning className="caption-4 font-mono text-[#666666]">
+              <div key={e.id} className="rounded-xl border border-border bg-white p-3">
+                <p className="body-6 font-medium text-ink">{e.subject}</p>
+                <p className="caption-4 mt-1 truncate text-ink-3">{e.from}</p>
+                <p suppressHydrationWarning className="caption-4 font-mono text-ink-3">
                   {formatTaskDue(e.date)}
                 </p>
-                <p className="caption-5 mt-2 line-clamp-3 text-[#666666]">{e.snippet}</p>
+                <p className="caption-5 mt-2 line-clamp-3 text-ink-3">{e.snippet}</p>
               </div>
             ))}
           </div>

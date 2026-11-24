@@ -44,15 +44,30 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* ─── SyncMe light design tokens ─────────────────────────────────────────────
-   White page · #F5F5F5 alternate sections · #F0F0F0 inset surfaces ·
-   #E5E5E5 borders (#A3A3A3 on hover). Flat color only; the single allowed
-   gradient is the hero heading text (#000000 → #666666).                     */
+/* ─── SyncMe daylight tokens ─────────────────────────────────────────────────
+   Crisp alabaster page with soft sky-to-cobalt atmospheric depth, white
+   surfaces, slate ink. The only gradients: the brand blue ramp (accents and
+   the hero highlight) and the top-of-page ambient glow.                      */
 @theme {
   /* Surfaces */
-  --color-alt: #f5f5f5;
-  --color-inset: #f0f0f0;
-  --color-border-strong: #a3a3a3;
+  --color-page: #f8fafc;
+  --color-alt: #f1f5f9;
+  --color-inset: #f1f5f9;
+  --color-line: #e2e8f0;
+  --color-line-strong: #cbd5e1;
+
+  /* Slate ink scale */
+  --color-ink: #0f172a;
+  --color-ink-2: #475569;
+  --color-ink-3: #64748b;
+  --color-ink-4: #94a3b8;
+  --color-mono-ink: #334155;
+
+  /* Brand blues */
+  --color-brand: #2563eb;
+  --color-brand-deep: #1d4ed8;
+  --color-brand-mid: #0284c7;
+  --color-brand-sky: #38bdf8;
 
   /* Category tints (text on flat tinted background) */
   --color-cat-neptun: #1d4ed8;
@@ -66,71 +81,71 @@
 
   /* Status tints (always paired with an icon and a text label) */
   --color-status-high: #b91c1c;
-  --color-status-high-bg: #fee2e2;
-  --color-status-warn: #a16207;
-  --color-status-warn-bg: #fef3c7;
-  --color-status-warn-border: #eab308;
-  --color-status-low: #666666;
-  --color-status-low-bg: #f0f0f0;
+  --color-status-high-bg: #fef2f2;
+  --color-status-warn: #b45309;
+  --color-status-warn-bg: #fffbeb;
+  --color-status-warn-border: #f59e0b;
+  --color-status-low: #64748b;
+  --color-status-low-bg: #f1f5f9;
 }
 
 :root {
-  --radius: 0.5rem;
-  --background: #ffffff;
-  --foreground: #000000;
+  --radius: 0.75rem;
+  --background: #f8fafc;
+  --foreground: #0f172a;
   --card: #ffffff;
-  --card-foreground: #000000;
+  --card-foreground: #0f172a;
   --popover: #ffffff;
-  --popover-foreground: #000000;
-  --primary: #000000;
+  --popover-foreground: #0f172a;
+  --primary: #2563eb;
   --primary-foreground: #ffffff;
-  --secondary: #f5f5f5;
-  --secondary-foreground: #000000;
-  --muted: #f5f5f5;
-  --muted-foreground: #666666;
-  --accent: #f0f0f0;
-  --accent-foreground: #000000;
+  --secondary: #f1f5f9;
+  --secondary-foreground: #0f172a;
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+  --accent: #f1f5f9;
+  --accent-foreground: #0f172a;
   --destructive: #b91c1c;
   --destructive-foreground: #ffffff;
-  --border: #e5e5e5;
-  --input: #e5e5e5;
-  --ring: #000000;
-  --chart-1: #000000;
-  --chart-2: #666666;
-  --chart-3: #a3a3a3;
-  --chart-4: #d4d4d4;
-  --chart-5: #e5e5e5;
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --ring: #2563eb;
+  --chart-1: #2563eb;
+  --chart-2: #0284c7;
+  --chart-3: #38bdf8;
+  --chart-4: #64748b;
+  --chart-5: #cbd5e1;
   --sidebar: #ffffff;
-  --sidebar-foreground: #000000;
-  --sidebar-primary: #000000;
+  --sidebar-foreground: #0f172a;
+  --sidebar-primary: #2563eb;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #f0f0f0;
-  --sidebar-accent-foreground: #000000;
-  --sidebar-border: #e5e5e5;
-  --sidebar-ring: #000000;
+  --sidebar-accent: #f1f5f9;
+  --sidebar-accent-foreground: #0f172a;
+  --sidebar-border: #e2e8f0;
+  --sidebar-ring: #2563eb;
 }
 
 /* SyncMe ships light only: no dark mode, no theme toggle, no dark styles. */
 .dark {
-  --background: #ffffff;
-  --foreground: #000000;
+  --background: #f8fafc;
+  --foreground: #0f172a;
   --card: #ffffff;
-  --card-foreground: #000000;
+  --card-foreground: #0f172a;
   --popover: #ffffff;
-  --popover-foreground: #000000;
-  --primary: #000000;
+  --popover-foreground: #0f172a;
+  --primary: #2563eb;
   --primary-foreground: #ffffff;
-  --secondary: #f5f5f5;
-  --secondary-foreground: #000000;
-  --muted: #f5f5f5;
-  --muted-foreground: #666666;
-  --accent: #f0f0f0;
-  --accent-foreground: #000000;
+  --secondary: #f1f5f9;
+  --secondary-foreground: #0f172a;
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+  --accent: #f1f5f9;
+  --accent-foreground: #0f172a;
   --destructive: #b91c1c;
   --destructive-foreground: #ffffff;
-  --border: #e5e5e5;
-  --input: #e5e5e5;
-  --ring: #000000;
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --ring: #2563eb;
 }
 
 @layer base {
@@ -142,7 +157,10 @@
     scroll-behavior: smooth;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans;
+  }
+  ::selection {
+    background: rgba(37, 99, 235, 0.14);
   }
   @media (prefers-reduced-motion: reduce) {
     html {
@@ -152,9 +170,8 @@
 }
 
 /* ─── Named text styles ──────────────────────────────────────────────────────
-   Every text element uses exactly one of these. No arbitrary font sizes.
-   heading-1/2 fall back to heading-3/4 sizes on mobile by design.
-   Headings balance their lines; body copy wraps pretty.                      */
+   Every text element uses exactly one of these. Headings balance their
+   lines; body copy wraps pretty. Weights stop at semibold.                   */
 @layer components {
   .heading-1 {
     @apply text-4xl leading-10 font-semibold tracking-tight sm:text-6xl sm:leading-none;
@@ -222,38 +239,124 @@
 
 /* ─── Motion ─────────────────────────────────────────────────────────────────
    Base curve for everything: cubic-bezier(0.22, 1, 0.36, 1). Position and
-   layout feel: 500ms. Color and opacity shifts: 300ms. Nothing below 200ms.
-   Only transform and opacity are ever animated.                              */
+   layout feel: 500 to 800ms. Color and opacity shifts: 200 to 300ms. Only
+   transform and opacity are ever animated.                                   */
 @utility ease-base {
   transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* Cards and panels: 500ms movement, 300ms color, on the base curve. */
+/* Top-of-page ambient glow: soft sky-to-cobalt depth behind all content. */
+.ambient-glow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 480px;
+  z-index: -10;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 80% 50% at 50% -10%,
+    rgba(37, 99, 235, 0.12),
+    rgba(56, 189, 248, 0.05) 55%,
+    transparent 100%
+  );
+}
+
+/* Floating glass navigation surface. */
+.glass-nav {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Brand blue gradient text: the single accent ramp (hero highlight). */
+.text-gradient-brand {
+  background-image: linear-gradient(135deg, #2563eb 0%, #0284c7 50%, #38bdf8 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Primary button: cobalt surface, top inner highlight, soft blue shadow. */
+.btn-primary {
+  background-color: #2563eb;
+  color: #ffffff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 6px 20px -4px rgba(37, 99, 235, 0.4);
+  transition:
+    background-color 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 300ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.btn-primary:hover {
+  background-color: #1d4ed8;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 8px 24px -4px rgba(37, 99, 235, 0.45);
+}
+.btn-primary:active {
+  transform: scale(0.98);
+}
+
+/* Secondary button: white surface with a hairline border, quiet hover. */
+.btn-secondary {
+  background-color: #ffffff;
+  color: #0f172a;
+  transition:
+    background-color 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 300ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.btn-secondary:hover {
+  background-color: #f8fafc;
+  border-color: #cbd5e1;
+}
+.btn-secondary:active {
+  transform: scale(0.98);
+}
+
+/* Cards and panels: gentle lift, border and shadow settle in on the base curve. */
 .card-hover {
   transition:
     transform 500ms cubic-bezier(0.22, 1, 0.36, 1),
     border-color 300ms cubic-bezier(0.22, 1, 0.36, 1),
     background-color 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 300ms cubic-bezier(0.22, 1, 0.36, 1),
     opacity 300ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .card-hover:hover {
   transform: translateY(-2px);
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 14px -4px rgba(15, 23, 42, 0.06);
 }
 .card-hover:active {
   transform: scale(0.98);
 }
 
-/* Tagline reveal (mandatory section): words rest at 30% black, activate to
-   full black one by one as they cross the trigger line. */
-.word-reveal {
-  opacity: 0.3;
-  transition: opacity 500ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-.word-reveal[data-active="true"] {
-  opacity: 1;
+/* Masked line wrappers for the Wise-style upward reveal. The overflow hidden
+   wrapper clips the line; the inner element is animated by Framer Motion. */
+.reveal-mask {
+  display: block;
+  overflow: hidden;
+  padding-bottom: 0.08em;
+  margin-bottom: -0.08em;
 }
 
-/* Skeleton loaders: shaped like real cards, slow opacity pulse (opacity only). */
+/* Luminous brand emblem: a soft blue ambient halo, brightening on hover. */
+.logo-halo {
+  box-shadow: 0 0 24px rgba(37, 99, 235, 0.25);
+  transition:
+    box-shadow 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 300ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+a:hover .logo-halo,
+button:hover .logo-halo,
+.logo-halo:hover {
+  box-shadow: 0 0 32px rgba(37, 99, 235, 0.45);
+}
+
+/* Skeleton loaders: shaped like real rows, slow opacity pulse (opacity only). */
 .skeleton-soft {
   animation: skeleton-pulse 2.4s cubic-bezier(0.22, 1, 0.36, 1) infinite;
 }
@@ -273,11 +376,11 @@
   .card-hover:hover,
   .card-hover:active {
     transform: none;
-    transition-property: opacity, border-color, background-color;
+    transition-property: opacity, border-color, background-color, box-shadow;
   }
-  .word-reveal {
-    opacity: 1;
-    transition: none;
+  .btn-primary:active,
+  .btn-secondary:active {
+    transform: none;
   }
   .skeleton-soft {
     animation: none;
@@ -285,10 +388,10 @@
   }
 }
 
-/* ─── Slim scrollbar tuned for the light theme ────────────────────────────── */
+/* ─── Slim scrollbar tuned for the daylight theme ─────────────────────────── */
 .scrollbar-slim {
   scrollbar-width: thin;
-  scrollbar-color: #d4d4d4 transparent;
+  scrollbar-color: #cbd5e1 transparent;
 }
 .scrollbar-slim::-webkit-scrollbar {
   width: 6px;
@@ -298,9 +401,9 @@
   background: transparent;
 }
 .scrollbar-slim::-webkit-scrollbar-thumb {
-  background: #d4d4d4;
+  background: #cbd5e1;
   border-radius: 999px;
 }
 .scrollbar-slim::-webkit-scrollbar-thumb:hover {
-  background: #a3a3a3;
+  background: #94a3b8;
 }

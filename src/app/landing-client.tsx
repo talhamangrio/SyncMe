@@ -6,7 +6,6 @@ import { Benefits } from "@/components/landing/benefits";
 import { HowItWorks } from "@/components/landing/how-it-works";
 import { Faq } from "@/components/landing/faq";
 import { FinalCta } from "@/components/landing/final-cta";
-import { TaglineReveal } from "@/components/tagline-reveal";
 import { SiteFooter } from "@/components/site-footer";
 
 const AUTH_ERROR_LABELS: Record<string, string> = {
@@ -41,13 +40,12 @@ export function LandingClient({
       <FloatingNav signedIn={signedIn} />
       <main id="main" className="flex-1">
         <Hero signedIn={signedIn} authBanner={banner} />
-        <TaglineReveal />
         <Benefits />
         <HowItWorks />
         {/*
-          Social proof (skill A2): no invented testimonials.
+          Social proof: no invented testimonials.
           {{testimonial}} — real student quotes slot in here once collected.
-          Until then the hero proof line carries the three trust signals.
+          Until then the hero trust line carries the three trust signals.
         */}
         <Faq />
         <FinalCta signedIn={signedIn} />

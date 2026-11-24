@@ -77,7 +77,7 @@ export const PRIORITY_UI: Record<TaskPriority, { pill: string; label: string }> 
 export const URGENCY_PILL = "bg-status-high-bg text-status-high";
 
 /** Neutral source chip ("Gmail" or "Moodle"): inset surface, secondary text. */
-export const SOURCE_CHIP = "bg-inset text-[#666666]";
+export const SOURCE_CHIP = "bg-inset text-ink-3";
 
 /** Normalize/validate one raw task object coming from the AI or heuristics. */
 export function sanitizeTask(raw: unknown, fallbackId: string): SyncTask | null {

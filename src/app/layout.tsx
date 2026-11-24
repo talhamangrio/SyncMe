@@ -35,7 +35,8 @@ export const metadata: Metadata = {
     images: ["/og.png"],
   },
   icons: {
-    icon: "/logo.svg",
+    icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/apple-icon.png" }],
   },
 };
 
@@ -49,23 +50,26 @@ export default function RootLayout({
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}>
         <a
           href="#main"
-          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-lg focus:bg-black focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white"
+          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-lg focus:bg-brand focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white"
         >
           Skip to content
         </a>
+        {/* Soft sky-to-cobalt ambient depth behind the top of every page. */}
+        <div aria-hidden="true" className="ambient-glow" />
         {children}
-        {/* Calm system messages: black surface, white text, no exclamation marks. */}
+        {/* Calm system messages: white surface, slate ink, no exclamation marks. */}
         <Toaster
           position="top-right"
           closeButton
           toastOptions={{
             classNames: {
-              toast: "!rounded-lg !border !border-black !bg-black !text-white !shadow-sm",
-              title: "!text-white !text-sm !font-medium",
-              description: "!text-white/70 !text-sm",
-              actionButton: "!bg-white !text-black !font-semibold",
-              cancelButton: "!bg-white/10 !text-white",
-              closeButton: "!bg-white !text-black !border-border",
+              toast:
+                "!rounded-xl !border !border-[#E2E8F0] !bg-white !text-[#0F172A] !shadow-[0_8px_24px_-8px_rgba(15,23,42,0.12)]",
+              title: "!text-sm !font-semibold !text-[#0F172A]",
+              description: "!text-sm !text-[#475569]",
+              actionButton: "!rounded-lg !bg-[#2563EB] !text-white !font-semibold",
+              cancelButton: "!rounded-lg !bg-[#F1F5F9] !text-[#0F172A]",
+              closeButton: "!bg-white !text-[#475569] !border-[#E2E8F0]",
             },
           }}
         />

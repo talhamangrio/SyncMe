@@ -6,17 +6,19 @@ import { GoogleMark } from "@/components/landing/google-mark";
 import { Reveal } from "@/components/landing/reveal";
 
 const PRIMARY =
-  "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-black px-3 py-2 button-md text-white transition-colors duration-300 ease-base hover:bg-[#262626] active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black";
+  "btn-primary inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-5 py-2.5 button-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
 
 const QUIET =
-  "caption-1 text-[#666666] underline-offset-4 transition-colors duration-300 ease-base hover:text-black hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black";
+  "caption-1 text-ink-3 underline-offset-4 transition-colors duration-300 ease-base hover:text-ink hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
 
 export function FinalCta({ signedIn = false }: { signedIn?: boolean }) {
   return (
     <section aria-label="Get started" className="bg-white px-4 py-16 sm:px-6 sm:py-24">
       <Reveal className="mx-auto max-w-[680px] text-center">
-        <h2 className="heading-2 text-black">Your next deadline is already in your inbox</h2>
-        <p className="body-3 mt-4 text-[#666666]">Connect once and never dig through university mail again.</p>
+        <h2 className="heading-2 text-ink">
+          Your next deadline is <span className="text-gradient-brand">already in your inbox.</span>
+        </h2>
+        <p className="body-3 mt-4 text-ink-3">Connect once and never dig through university mail again.</p>
         <div className="mt-8 flex flex-col items-center gap-4">
           {signedIn ? (
             <Link href="/dashboard" className={PRIMARY}>
@@ -30,10 +32,10 @@ export function FinalCta({ signedIn = false }: { signedIn?: boolean }) {
             </a>
           )}
           <a href="/api/demo/enter" className={QUIET}>
-            Or explore the demo sandbox
+            Try the live demo sandbox
           </a>
         </div>
-        <p className="caption-1 mt-8 text-[#666666]">Read only access. No emails stored on servers. Log out anytime.</p>
+        <p className="caption-1 mt-8 text-ink-3">Read only access. No emails stored on servers. Log out anytime.</p>
       </Reveal>
     </section>
   );
