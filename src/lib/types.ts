@@ -54,16 +54,47 @@ export interface MoodleSyncResponse {
 
 export const TASK_CATEGORIES: TaskCategory[] = ["Neptun", "Moodle", "Medical", "Immigration"];
 
-/** Light category styling: tinted chip text on a flat tinted background. */
+/**
+ * Dashboard filter buckets. Medical and Immigration mail all arrives through
+ * Gmail, so both share one "Gmail" bucket alongside the dedicated Neptun and
+ * Moodle sources — three chips plus All, matching the student's mental model.
+ */
+export type TaskFilter = "All" | "Neptun" | "Moodle" | "Gmail";
+export const TASK_FILTERS: TaskFilter[] = ["All", "Neptun", "Moodle", "Gmail"];
+
+/** Does the task belong under the given filter bucket? */
+export function taskMatchesFilter(task: SyncTask, filter: TaskFilter): boolean {
+  if (filter === "All") return true;
+  if (filter === "Neptun") return task.category === "Neptun";
+  if (filter === "Moodle") return task.category === "Moodle" || task.source === "Moodle";
+  // "Gmail": every remaining email-sourced deadline (Medical, Immigration, …).
+  return task.source !== "Moodle" && task.category !== "Neptun" && task.category !== "Moodle";
+}
+
+/**
+ * Chip label shown on task rows: Medical and Immigration deadlines display
+ * under their delivery source — Gmail — to keep the three-bucket model.
+ */
+export function displayCategoryLabel(category: TaskCategory): string {
+  return category === "Medical" || category === "Immigration" ? "Gmail" : category;
+}
+
+/**
+ * Stable identity across syncs: the AI may slug ids differently between runs,
+ * but title + source email subject stay the same for the same underlying
+ * email. Used to keep done tasks done even when their id changes.
+ */
+export function taskIdentityKey(task: Pick<SyncTask, "title" | "sourceEmailSubject">): string {
+  return `${task.title.trim().toLowerCase()}|${task.sourceEmailSubject.trim().toLowerCase()}`;
+}
+
+/** Light category styling: tinted chip text on a flat tinted background.
+ *  Medical and Immigration render as the Gmail bucket (neutral slate tint). */
 export const CATEGORY_UI: Record<TaskCategory, { chip: string; icon: string; circle: string }> = {
   Neptun: { chip: "bg-cat-neptun-bg text-cat-neptun", icon: "text-cat-neptun", circle: "bg-cat-neptun-bg" },
   Moodle: { chip: "bg-cat-moodle-bg text-cat-moodle", icon: "text-cat-moodle", circle: "bg-cat-moodle-bg" },
-  Medical: { chip: "bg-cat-medical-bg text-cat-medical", icon: "text-cat-medical", circle: "bg-cat-medical-bg" },
-  Immigration: {
-    chip: "bg-cat-immigration-bg text-cat-immigration",
-    icon: "text-cat-immigration",
-    circle: "bg-cat-immigration-bg",
-  },
+  Medical: { chip: "bg-cat-gmail-bg text-cat-gmail", icon: "text-cat-gmail", circle: "bg-cat-gmail-bg" },
+  Immigration: { chip: "bg-cat-gmail-bg text-cat-gmail", icon: "text-cat-gmail", circle: "bg-cat-gmail-bg" },
 };
 
 /** Status tint pills: always paired with an icon and a text label (never color alone). */

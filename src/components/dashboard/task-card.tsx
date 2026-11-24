@@ -6,22 +6,28 @@ import {
   CaretRight,
   Check,
   CheckCircle,
+  EnvelopeSimple,
   GraduationCap,
-  IdentificationCard,
-  Stethoscope,
   WarningCircle,
 } from "@phosphor-icons/react/dist/ssr";
 import type { Icon } from "@phosphor-icons/react";
 import { normalizeDueDate } from "@/lib/dates";
-import { CATEGORY_UI, SOURCE_CHIP, URGENCY_PILL, type SyncTask, type TaskCategory } from "@/lib/types";
+import {
+  CATEGORY_UI,
+  SOURCE_CHIP,
+  URGENCY_PILL,
+  displayCategoryLabel,
+  type SyncTask,
+  type TaskCategory,
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-/** Phosphor icon per category — natural metaphors instead of tech jargon. */
+/** Phosphor icon per display bucket — Neptun, Moodle, and the shared Gmail envelope. */
 export const CATEGORY_ICONS: Record<TaskCategory, Icon> = {
   Neptun: GraduationCap,
   Moodle: BookOpen,
-  Medical: Stethoscope,
-  Immigration: IdentificationCard,
+  Medical: EnvelopeSimple,
+  Immigration: EnvelopeSimple,
 };
 
 /** Due date and time in Geist Mono, e.g. "Wed 26 Nov, 10:00". */
@@ -58,6 +64,7 @@ export interface TaskCardProps {
 export function TaskCard({ task, onOpen, onToggleDone, done = false, showUrgency = false }: TaskCardProps) {
   const cat = CATEGORY_UI[task.category];
   const CatIcon = CATEGORY_ICONS[task.category];
+  const catLabel = displayCategoryLabel(task.category);
 
   const normalized = normalizeDueDate(task.dueDate);
   const dueMs = normalized === "unknown" ? Number.NaN : Date.parse(normalized);
@@ -162,8 +169,8 @@ export function TaskCard({ task, onOpen, onToggleDone, done = false, showUrgency
         <div className="flex items-start justify-between gap-2">
           <h3 className="line-clamp-2 min-w-0 text-sm font-semibold leading-snug text-ink">{task.title}</h3>
           <span className="mt-0.5 flex shrink-0 items-center gap-1.5">
-            <span className={cn("rounded-full px-2 py-0.5 text-xs leading-4", cat.chip)}>{task.category}</span>
-            {task.source ? (
+            <span className={cn("rounded-full px-2 py-0.5 text-xs leading-4", cat.chip)}>{catLabel}</span>
+            {task.source && task.source !== catLabel ? (
               <span
                 className={cn(
                   "hidden shrink-0 rounded-full px-2 py-0.5 text-xs leading-4 sm:inline",

@@ -1,6 +1,6 @@
 "use client";
 
-import { MaskedLine, Reveal } from "@/components/landing/reveal";
+import { RiseLine, Reveal } from "@/components/landing/reveal";
 
 interface Step {
   num: string;
@@ -31,7 +31,7 @@ export function HowItWorks() {
     <section id="how-it-works" aria-label="How it works" className="scroll-mt-24 bg-white px-4 py-16 sm:px-6 sm:py-24">
       <div className="mx-auto max-w-6xl">
         <h2 className="heading-2 text-ink">
-          <MaskedLine mode="scroll">Three steps. Zero typing.</MaskedLine>
+          <RiseLine mode="scroll">Three steps. Zero typing.</RiseLine>
         </h2>
         <div className="relative mt-12">
           <div aria-hidden="true" className="absolute left-0 right-0 top-5 hidden h-px bg-border sm:block" />

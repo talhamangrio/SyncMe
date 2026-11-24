@@ -78,6 +78,9 @@
   --color-cat-medical-bg: #d1fae5;
   --color-cat-immigration: #7e22ce;
   --color-cat-immigration-bg: #f3e8ff;
+  /* Gmail bucket (Medical + Immigration mail): neutral slate chip */
+  --color-cat-gmail: #475569;
+  --color-cat-gmail-bg: #e2e8f0;
 
   /* Status tints (always paired with an icon and a text label) */
   --color-status-high: #b91c1c;
@@ -334,13 +337,11 @@
   transform: scale(0.98);
 }
 
-/* Masked line wrappers for the Wise-style upward reveal. The overflow hidden
-   wrapper clips the line; the inner element is animated by Framer Motion. */
-.reveal-mask {
+/* Line wrapper for the heading reveal animation. Block level only — the line
+   animates via Framer Motion (fade + small pixel rise) with no overflow
+   clipping, so heading text can never be hidden by a composited mask. */
+.reveal-line {
   display: block;
-  overflow: hidden;
-  padding-bottom: 0.08em;
-  margin-bottom: -0.08em;
 }
 
 /* Luminous brand emblem: a soft blue ambient halo, brightening on hover. */

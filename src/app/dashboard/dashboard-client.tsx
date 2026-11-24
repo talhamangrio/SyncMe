@@ -7,8 +7,11 @@ import { toast } from "sonner";
 import {
   ArrowsClockwise,
   ArrowLeft,
+  BookOpen,
   CheckCircle,
+  EnvelopeSimple,
   Flask,
+  GraduationCap,
   List,
   ShieldCheck,
   SignOut,
@@ -26,15 +29,21 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { CATEGORY_ICONS, ConflictGroup, DoneTaskRow, TaskCard, formatTaskDue } from "@/components/dashboard/task-card";
+import { ConflictGroup, DoneTaskRow, TaskCard, formatTaskDue } from "@/components/dashboard/task-card";
 import { Logo } from "@/components/logo";
 import { SiteFooter } from "@/components/site-footer";
 import { BASE_CURVE } from "@/components/landing/reveal";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { DEMO_DONE, DEMO_DONE_TASKS, DEMO_EMAILS, DEMO_TASKS } from "@/lib/demo-data";
 import { addDaysKey, budapestTodayKey, dayKeyOf, sortChronologically } from "@/lib/dates";
-import type { GmailSyncResponse, MoodleSyncResponse, RawEmail, SyncMeUser, SyncTask, TaskCategory } from "@/lib/types";
-import { CATEGORY_UI, TASK_CATEGORIES } from "@/lib/types";
+import type { GmailSyncResponse, MoodleSyncResponse, RawEmail, SyncMeUser, SyncTask, TaskFilter } from "@/lib/types";
+import {
+  CATEGORY_UI,
+  TASK_FILTERS,
+  displayCategoryLabel,
+  taskIdentityKey,
+  taskMatchesFilter,
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const POLL_INTERVAL_MS = 30_000;
@@ -56,6 +65,13 @@ type DashboardView = "upcoming" | "done";
 interface DoneEntry {
   task: SyncTask;
   origin: "gmail" | "moodle";
+}
+
+/** Identity keys of every stored snapshot — blocks duplicate done rows. */
+function snapshotKeysOf(entries: Record<string, DoneEntry>): Set<string> {
+  const keys = new Set<string>();
+  for (const entry of Object.values(entries)) keys.add(taskIdentityKey(entry.task));
+  return keys;
 }
 
 /** One summary tile in the top grid; clickable tiles switch the list view. */
@@ -98,10 +114,16 @@ function tagSource(tasks: SyncTask[], source: "Gmail" | "Moodle"): SyncTask[] {
  * never come back. Entries older than two days are pruned — the Overdue
  * group still gets a chance to warn, the past never piles up.
  */
-function mergeTasks(prev: SyncTask[], next: SyncTask[], done: Set<string>): SyncTask[] {
+function mergeTasks(
+  prev: SyncTask[],
+  next: SyncTask[],
+  done: Set<string>,
+  doneKeys: Set<string>,
+): SyncTask[] {
   const byId = new Map<string, SyncTask>();
-  for (const t of prev) if (!done.has(t.id)) byId.set(t.id, t);
-  for (const t of next) if (!done.has(t.id)) byId.set(t.id, t);
+  const isDone = (t: SyncTask) => done.has(t.id) || doneKeys.has(taskIdentityKey(t));
+  for (const t of prev) if (!isDone(t)) byId.set(t.id, t);
+  for (const t of next) if (!isDone(t)) byId.set(t.id, t);
   const floorKey = addDaysKey(budapestTodayKey(), -2);
   return [...byId.values()]
     .filter((t) => {
@@ -146,6 +168,14 @@ const BUTTON_PRIMARY =
   "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-transparent px-3 py-2 button-md btn-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:pointer-events-none disabled:opacity-50";
 const BUTTON_SECONDARY =
   "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-white px-3 py-2 button-md text-ink btn-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:pointer-events-none disabled:opacity-50";
+
+/** Filter chip icons: the three sources — "All" carries no icon. */
+const FILTER_ICONS: Record<TaskFilter, Icon | null> = {
+  All: null,
+  Neptun: GraduationCap,
+  Moodle: BookOpen,
+  Gmail: EnvelopeSimple,
+};
 
 /** Skeleton shaped exactly like a real compact task row, slow opacity pulse. */
 function TaskRowSkeleton() {
@@ -207,7 +237,7 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
   const [doneTasks, setDoneTasks] = useState<Record<string, DoneEntry>>({});
   const [view, setView] = useState<DashboardView>("upcoming");
   const [moodleConnected, setMoodleConnected] = useState(false);
-  const [filter, setFilter] = useState<"All" | TaskCategory>("All");
+  const [filter, setFilter] = useState<TaskFilter>("All");
   const [moodleUrl, setMoodleUrl] = useState("");
   const [moodleConnecting, setMoodleConnecting] = useState(false);
   const [moodleError, setMoodleError] = useState<string | null>(null);
@@ -221,6 +251,7 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
 
   /** Ref mirrors so the 30s polling merge never resurrects done tasks. */
   const doneRef = useRef<Set<string>>(new Set());
+  const doneTasksRef = useRef<Record<string, DoneEntry>>({});
   const completingRef = useRef<Set<string>>(new Set());
   const lastDoneRef = useRef<{ task: SyncTask; origin: "gmail" | "moodle" } | null>(null);
   const moodleInputRef = useRef<HTMLInputElement>(null);
@@ -238,6 +269,11 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
     const timer = setInterval(() => setTick((t) => t + 1), 10_000);
     return () => clearInterval(timer);
   }, []);
+
+  // ── Mirror completed snapshots into a ref (sync-time adoption reads it) ───
+  useEffect(() => {
+    doneTasksRef.current = doneTasks;
+  }, [doneTasks]);
 
   // ── Restore the persisted session state before the first sync fires ───────
   useEffect(() => {
@@ -271,6 +307,7 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
       const at = mergedDoneAt[id];
       if (!at || Date.parse(at) > monthCutoff) liveDoneTasks[id] = entry;
     }
+    doneTasksRef.current = liveDoneTasks;
     setDoneTasks(liveDoneTasks);
     setGmailTasks((prev) => (prev.length === 0 ? tagSource(savedTasks, "Gmail") : prev));
     setMoodleTasks((prev) => (prev.length === 0 ? tagSource(savedMoodle, "Moodle") : prev));
@@ -297,6 +334,34 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
   useEffect(() => {
     if (!isDemo) saveJson(DONE_TASKS_KEY, doneTasks);
   }, [doneTasks, isDemo]);
+
+  /**
+   * Adopt synced tasks that are already marked done but have no stored
+   * snapshot (completed before snapshots existed, or re-extracted under a
+   * fresh AI slug). They rejoin the Completed list instead of silently
+   * disappearing, and their identity key keeps them out of the schedule.
+   */
+  const adoptSnapshots = useCallback((tasks: SyncTask[], origin: "gmail" | "moodle") => {
+    if (tasks.length === 0) return;
+    const source = origin === "gmail" ? "Gmail" : "Moodle";
+    const snapshots = doneTasksRef.current;
+    const keys = snapshotKeysOf(snapshots);
+    const adopted: Record<string, DoneEntry> = {};
+    const adoptedAt: Record<string, string> = {};
+    for (const raw of tasks) {
+      const task: SyncTask = { ...raw, source };
+      const key = taskIdentityKey(task);
+      if (!doneRef.current.has(task.id) && !keys.has(key)) continue;
+      if (snapshots[task.id] || keys.has(key)) continue;
+      adopted[task.id] = { task, origin };
+      adoptedAt[task.id] = new Date().toISOString();
+      keys.add(key);
+    }
+    if (Object.keys(adopted).length === 0) return;
+    doneTasksRef.current = { ...doneTasksRef.current, ...adopted };
+    setDoneTasks((prev) => ({ ...prev, ...adopted }));
+    setDoneAt((prev) => ({ ...adoptedAt, ...prev }));
+  }, []);
 
   // ── Gmail sync (also runs on load and polls every 30s) ────────────────────
   const syncNow = useCallback(
@@ -329,8 +394,12 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
           }
           return;
         }
-        // Merge instead of replace: previously synced tasks never fade away.
-        setGmailTasks((prev) => mergeTasks(prev, tagSource(data.tasks, "Gmail"), doneRef.current));
+        // Adopt done-flagged tasks first, then merge: completed work never
+        // resurfaces in the schedule, even under a fresh AI task id.
+        adoptSnapshots(data.tasks, "gmail");
+        setGmailTasks((prev) =>
+          mergeTasks(prev, tagSource(data.tasks, "Gmail"), doneRef.current, snapshotKeysOf(doneTasksRef.current)),
+        );
         setEmails((prev) => mergeEmails(prev, data.emails));
         setEngine(data.engine ?? null);
         setConnected(true);
@@ -351,7 +420,7 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
         setSyncing(false);
       }
     },
-    [isDemo],
+    [isDemo, adoptSnapshots],
   );
 
   useEffect(() => {
@@ -385,7 +454,10 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
         }
         return;
       }
-      setMoodleTasks((prev) => mergeTasks(prev, tagSource(data.tasks, "Moodle"), doneRef.current));
+      adoptSnapshots(data.tasks, "moodle");
+      setMoodleTasks((prev) =>
+        mergeTasks(prev, tagSource(data.tasks, "Moodle"), doneRef.current, snapshotKeysOf(doneTasksRef.current)),
+      );
       setMoodleConnected(true);
       window.localStorage.setItem(MOODLE_URL_KEY, url);
       if (!silent) {
@@ -400,7 +472,7 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
     } finally {
       setMoodleConnecting(false);
     }
-  }, []);
+  }, [adoptSnapshots]);
 
   useEffect(() => {
     if (isDemo) return;
@@ -420,8 +492,11 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
       nextDone.add(task.id);
       doneRef.current = nextDone;
       setDoneIds(nextDone);
-      setDoneAt((prev) => ({ ...prev, [task.id]: new Date().toISOString() }));
-      setDoneTasks((prev) => ({ ...prev, [task.id]: { task, origin } }));
+      const doneAtStamp = new Date().toISOString();
+      const entry: DoneEntry = { task, origin };
+      doneTasksRef.current = { ...doneTasksRef.current, [task.id]: entry };
+      setDoneAt((prev) => ({ ...prev, [task.id]: doneAtStamp }));
+      setDoneTasks((prev) => ({ ...prev, [task.id]: entry }));
       setGmailTasks((prev) => prev.filter((t) => t.id !== task.id));
       setMoodleTasks((prev) => prev.filter((t) => t.id !== task.id));
       if (drawerTask?.id === task.id) setDrawerTask(null);
@@ -448,6 +523,9 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
       delete copy[task.id];
       return copy;
     });
+    const restSnapshots = { ...doneTasksRef.current };
+    delete restSnapshots[task.id];
+    doneTasksRef.current = restSnapshots;
     setDoneTasks((prev) => {
       const copy = { ...prev };
       delete copy[task.id];
@@ -495,13 +573,20 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
   );
 
   const filteredTasks = useMemo(
-    () => (filter === "All" ? allTasks : allTasks.filter((t) => t.category === filter)),
+    () => allTasks.filter((t) => taskMatchesFilter(t, filter)),
     [allTasks, filter],
   );
 
+  /** Tasks due today (post-filter) — rendered in the spotlight above the feed. */
+  const todayTasks = useMemo(
+    () => sortChronologically(filteredTasks.filter((t) => dayKeyOf(t.dueDate) === todayKey)),
+    [filteredTasks, todayKey],
+  );
+
   /**
-   * Strict day-by-day groups in ascending calendar order — no vague multi-day
-   * buckets. Every date with tasks gets its own header: TODAY · Tue 24 Nov,
+   * Strict day-by-day groups in ascending calendar order for the rest of the
+   * schedule — no vague multi-day buckets. Today lives in the "Today"
+   * spotlight above the filter bar, so it is excluded here. Headers read
    * TOMORROW · Wed 25 Nov, then exact THU 26 NOV style headers. Past days
    * surface as OVERDUE · <date>; undated tasks sink into a trailing group.
    */
@@ -515,6 +600,7 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
         undated.push(t);
         continue;
       }
+      if (day === todayKey) continue; // surfaced in the Today spotlight above
       const bucket = byDay.get(day);
       if (bucket) bucket.push(t);
       else byDay.set(day, [t]);
@@ -524,7 +610,6 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
       const noon = new Date(`${day}T12:00:00`);
       let label: string;
       if (day < todayKey) label = `OVERDUE · ${format(noon, "EEE d MMM")}`;
-      else if (day === todayKey) label = `TODAY · ${format(noon, "EEE d MMM")}`;
       else if (day === tomorrowKey) label = `TOMORROW · ${format(noon, "EEE d MMM")}`;
       else label = format(noon, "EEE d MMM").toUpperCase();
       groups.push({ key: day, day, label, items: sortChronologically(byDay.get(day) ?? []) });
@@ -534,6 +619,12 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
     }
     return groups;
   }, [filteredTasks, todayKey]);
+
+  /** Friendly label of the nearest future deadline — powers the calm "Nothing due today" line. */
+  const nextDeadlineLabel = useMemo(() => {
+    const nextGroup = dateGroups.find((g) => g.day !== null && g.day > todayKey);
+    return nextGroup ? format(new Date(`${nextGroup.day}T12:00:00`), "EEE d MMM") : null;
+  }, [dateGroups, todayKey]);
 
   /** Days holding two or more deadlines — rendered as amber conflict groups. */
   const conflictMap = useMemo(() => {
@@ -579,8 +670,8 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
   }, [doneTasks, doneAt]);
 
   const categoryCounts = useMemo(() => {
-    const counts = new Map<string, number>([["All", allTasks.length]]);
-    for (const c of TASK_CATEGORIES) counts.set(c, allTasks.filter((t) => t.category === c).length);
+    const counts = new Map<string, number>();
+    for (const f of TASK_FILTERS) counts.set(f, allTasks.filter((t) => taskMatchesFilter(t, f)).length);
     return counts;
   }, [allTasks]);
 
@@ -628,7 +719,7 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
     },
   ];
 
-  const FILTERS = useMemo(() => ["All", ...TASK_CATEGORIES] as const, []);
+  const FILTERS = TASK_FILTERS;
 
   const syncLabel = useMemo(() => {
     if (!lastSync) return isDemo ? "Demo mode" : connected ? "Ready" : "Not connected";
@@ -647,9 +738,8 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
     moodleInputRef.current?.focus();
   };
 
-  /** Renders one day group's rows, wrapping same-day clusters in a conflict container. */
-  const renderGroupItems = (group: { day: string | null; items: SyncTask[] }): React.ReactNode => {
-    const { day, items } = group;
+  /** Renders one day's rows, wrapping same-day clusters in a conflict container. */
+  const renderDayItems = (day: string | null, items: SyncTask[]): React.ReactNode => {
     const rows = items.map((t, j) => (
       <TaskRow
         key={t.id}
@@ -826,6 +916,35 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
           <div className="space-y-6 lg:col-span-2">
             {view === "upcoming" ? (
               <>
+            {/* ── Today spotlight: exactly what has to happen right now ────── */}
+            {todayTasks.length > 0 ? (
+              <section
+                aria-label="Tasks due today"
+                className="rounded-2xl border border-brand/40 bg-white p-4 shadow-[0_12px_32px_-20px_rgba(37,99,235,0.45)] sm:p-5"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-baseline gap-2">
+                    <h2 className="text-lg font-semibold leading-7 text-brand">Today</h2>
+                    <span suppressHydrationWarning className="font-mono text-xs text-ink-3">
+                      {format(new Date(`${todayKey}T12:00:00`), "EEE d MMM")}
+                    </span>
+                  </div>
+                  <span className="caption-4 rounded-full bg-brand/10 px-2 py-1 font-semibold text-brand">
+                    {todayTasks.length} due
+                  </span>
+                </div>
+                <ul className="mt-3 space-y-2">{renderDayItems(todayKey, todayTasks)}</ul>
+              </section>
+            ) : allTasks.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-white px-4 py-3">
+                <CheckCircle className="h-4 w-4 shrink-0 text-cat-medical" aria-hidden="true" />
+                <p className="body-6 text-ink-3">
+                  <span className="font-semibold text-ink">Nothing due today.</span>
+                  {nextDeadlineLabel ? ` Next deadline ${nextDeadlineLabel}.` : " You are all caught up."}
+                </p>
+              </div>
+            ) : null}
+
             {/* ── Segmented pill filter bar ─────────────────────────────────── */}
             <div
               role="group"
@@ -835,7 +954,7 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
               <div className="inline-flex max-w-full items-center gap-1 rounded-xl border border-border bg-alt p-1">
                 {FILTERS.map((c) => {
                   const selected = filter === c;
-                  const CatIcon = c === "All" ? null : CATEGORY_ICONS[c];
+                  const CatIcon = FILTER_ICONS[c];
                   return (
                     <button
                       key={c}
@@ -871,7 +990,7 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
                     <TaskRowSkeleton key={i} />
                   ))}
                 </div>
-              ) : dateGroups.length === 0 ? (
+              ) : dateGroups.length === 0 && todayTasks.length === 0 ? (
                 <div className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-white px-4 py-12 text-center">
                   <span
                     aria-hidden="true"
@@ -879,9 +998,13 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
                   >
                     <CheckCircle className="h-6 w-6" />
                   </span>
-                  <h2 className="title-1 text-ink">Nothing due this week</h2>
+                  <h2 className="title-1 text-ink">
+                    {filter === "All" ? "Nothing due this week" : `No ${filter} tasks`}
+                  </h2>
                   <p className="body-3 max-w-sm text-ink-3">
-                    New deadlines appear here as soon as they land in your inbox or Moodle.
+                    {filter === "All"
+                      ? "New deadlines appear here as soon as they land in your inbox or Moodle."
+                      : "Switch back to All to see the rest of your schedule."}
                   </p>
                   {!moodleConnected && (
                     <button type="button" onClick={focusMoodleInput} className={cn(BUTTON_SECONDARY, "mt-2")}>
@@ -899,7 +1022,7 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
                           {group.items.length}
                         </span>
                       </div>
-                      <ul className="space-y-2">{renderGroupItems(group)}</ul>
+                      <ul className="space-y-2">{renderDayItems(group.day, group.items)}</ul>
                     </div>
                   ))}
                 </div>
@@ -1140,7 +1263,7 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
                       CATEGORY_UI[drawerTask.category].chip,
                     )}
                   >
-                    {drawerTask.category}
+                    {displayCategoryLabel(drawerTask.category)}
                   </span>
                 </p>
                 <p className="caption-4 mt-3 text-ink-3">Action summary</p>

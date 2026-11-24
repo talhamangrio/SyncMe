@@ -38,13 +38,17 @@ export function Reveal({
 }
 
 /**
- * Wise-style masked upward reveal: an overflow hidden line wrapper clips a
- * line that starts 105% below the mask and glides up into view over 700ms on
- * the base curve. mode "load" plays on first render (hero); mode "scroll"
- * plays once when the line scrolls into view (section headings). Under
+ * Line reveal for headings: the line fades in and rises 14px on the base
+ * curve. mode "load" plays on first render (hero); mode "scroll" plays once
+ * when the line scrolls into view (section headings). Under
  * prefers-reduced-motion the line renders with a plain opacity change.
+ *
+ * Deliberately NOT an overflow-masked percentage transform: a masked
+ * translateY("105%") reveal was leaving the headline permanently invisible
+ * in some desktop browsers (composited clip never repainted). A pixel-based
+ * rise always lands — the worst case is no animation, never missing text.
  */
-export function MaskedLine({
+export function RiseLine({
   children,
   className,
   delay = 0,
@@ -56,9 +60,9 @@ export function MaskedLine({
   mode?: "load" | "scroll";
 }) {
   const reduce = useReducedMotion();
-  const hidden = reduce ? { opacity: 0 } : { y: "105%", opacity: 0 };
-  const shown = reduce ? { opacity: 1 } : { y: "0%", opacity: 1 };
-  const transition = { duration: reduce ? 0.3 : 0.7, ease: BASE_CURVE, delay };
+  const hidden = reduce ? { opacity: 0 } : { opacity: 0, y: 14 };
+  const shown = reduce ? { opacity: 1 } : { opacity: 1, y: 0 };
+  const transition = { duration: reduce ? 0.3 : 0.6, ease: BASE_CURVE, delay };
   const motionProps =
     mode === "load"
       ? { initial: hidden, animate: shown, transition }
@@ -69,8 +73,8 @@ export function MaskedLine({
           transition,
         };
   return (
-    <span className="reveal-mask">
-      <motion.span className={cn("block will-change-transform", className)} {...motionProps}>
+    <span className="reveal-line">
+      <motion.span className={cn("block", className)} {...motionProps}>
         {children}
       </motion.span>
     </span>

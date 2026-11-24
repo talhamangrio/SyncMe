@@ -8,7 +8,7 @@ import { ArrowRight, GraduationCap, Lock, ShieldCheck } from "@phosphor-icons/re
 import { format } from "date-fns";
 import { ConflictGroup, TaskCard } from "@/components/dashboard/task-card";
 import { GoogleMark } from "@/components/landing/google-mark";
-import { BASE_CURVE, MaskedLine } from "@/components/landing/reveal";
+import { BASE_CURVE, RiseLine } from "@/components/landing/reveal";
 import type { SyncTask } from "@/lib/types";
 
 const HERO_TASKS: SyncTask[] = [
@@ -57,7 +57,6 @@ const HERO_TASKS: SyncTask[] = [
 const TRUST_ITEMS = [
   { icon: Lock, label: "Read only Gmail" },
   { icon: ShieldCheck, label: "Zero email storage" },
-  { icon: GraduationCap, label: "@unideb.hu ready" },
 ];
 
 const PRIMARY_CTA =
@@ -110,17 +109,17 @@ export function Hero({ signedIn = false, authBanner }: { signedIn?: boolean; aut
         </motion.p>
 
         <h1 className="mt-5 font-semibold tracking-tight text-ink text-[36px] leading-[1.12] sm:text-[48px] sm:leading-[1.08] md:text-[60px] md:leading-[1.06]">
-          <MaskedLine mode="load" delay={0.05}>Your student admin,</MaskedLine>
-          <MaskedLine mode="load" delay={0.15}>
+          <RiseLine mode="load" delay={0.05}>Your student admin,</RiseLine>
+          <RiseLine mode="load" delay={0.15}>
             <span className="text-gradient-brand">on autopilot.</span>
-          </MaskedLine>
+          </RiseLine>
         </h1>
 
         <p className="mt-5 text-base leading-6 text-ink-2 sm:text-lg sm:leading-7">
-          <MaskedLine mode="load" delay={0.25}>
+          <RiseLine mode="load" delay={0.25}>
             SyncMe scans Gmail and Moodle to turn buried exams, clinic visits, and deadlines into one
             conflict-checked plan.
-          </MaskedLine>
+          </RiseLine>
         </p>
 
         {/* One primary action above the fold; the demo sandbox is a quiet link */}

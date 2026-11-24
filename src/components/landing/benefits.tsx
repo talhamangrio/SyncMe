@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { BookOpen, EnvelopeSimple, Sparkle, WarningCircle } from "@phosphor-icons/react/dist/ssr";
 import type { Icon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
-import { MaskedLine, Reveal } from "@/components/landing/reveal";
+import { RiseLine, Reveal } from "@/components/landing/reveal";
 
 interface Benefit {
   title: string;
@@ -79,7 +79,7 @@ export function Benefits() {
     <section aria-label="Benefits" className="bg-alt px-4 py-16 sm:px-6 sm:py-24">
       <div className="mx-auto max-w-6xl">
         <h2 className="heading-2 text-ink">
-          <MaskedLine mode="scroll">From inbox chaos to a plan</MaskedLine>
+          <RiseLine mode="scroll">From inbox chaos to a plan</RiseLine>
         </h2>
         <div className="mt-12 grid gap-4 sm:grid-cols-2">
           {BENEFITS.map((benefit, i) => (

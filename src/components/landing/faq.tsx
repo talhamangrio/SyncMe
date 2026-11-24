@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { CaretDown } from "@phosphor-icons/react/dist/ssr";
+import { CaretDown, Question } from "@phosphor-icons/react/dist/ssr";
 import { FAQS } from "@/lib/faq-data";
 import { cn } from "@/lib/utils";
-import { BASE_CURVE, MaskedLine, Reveal } from "@/components/landing/reveal";
+import { BASE_CURVE, Reveal, RiseLine } from "@/components/landing/reveal";
 
 export function Faq() {
   const [open, setOpen] = useState<number | null>(null);
@@ -15,8 +15,13 @@ export function Faq() {
   return (
     <section id="faq" aria-label="Frequently asked questions" className="scroll-mt-24 bg-alt px-4 py-16 sm:px-6 sm:py-24">
       <div className="mx-auto max-w-2xl">
-        <h2 className="heading-2 text-ink">
-          <MaskedLine mode="scroll">Questions students actually ask</MaskedLine>
+        {/* Section label: a calm pill so the FAQ anchor is instantly findable */}
+        <p className="caption-3 inline-flex items-center gap-2 rounded-full border border-border bg-white px-3 py-1 text-ink-2">
+          <Question className="h-3.5 w-3.5 text-brand" aria-hidden="true" />
+          FAQ
+        </p>
+        <h2 className="heading-2 mt-4 text-ink">
+          <RiseLine mode="scroll">Questions students actually ask</RiseLine>
         </h2>
         <div className="mt-12 space-y-4">
           {FAQS.map((faq, i) => (
