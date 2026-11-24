@@ -1,69 +1,39 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { format } from "date-fns";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import {
-  BookOpen,
-  CalendarDays,
-  CheckCircle2,
-  CircleCheck,
-  FlaskConical,
-  GraduationCap,
-  HeartPulse,
-  Inbox,
-  Loader2,
-  LogOut,
-  MailWarning,
-  RefreshCw,
+  ArrowsClockwise,
+  CheckCircle,
+  Flask,
+  List,
   ShieldCheck,
-  Stamp,
-  Sun,
-  Zap,
-  type LucideIcon,
-} from "lucide-react";
+  SignOut,
+  WarningCircle,
+} from "@phosphor-icons/react/dist/ssr";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { ConflictGroup, TaskCard, formatTaskDue } from "@/components/dashboard/task-card";
 import { Logo } from "@/components/logo";
 import { SiteFooter } from "@/components/site-footer";
-import { findConflicts } from "@/lib/conflicts";
-import { DEMO_EMAILS, DEMO_TASKS } from "@/lib/demo-data";
-import { addDaysKey, budapestTodayKey, dayKeyOf, normalizeDueDate, timeBadgeOf } from "@/lib/dates";
+import { BASE_CURVE } from "@/components/landing/reveal";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { DEMO_DONE, DEMO_EMAILS, DEMO_TASKS } from "@/lib/demo-data";
+import { addDaysKey, budapestTodayKey, dayKeyOf, normalizeDueDate, sortChronologically } from "@/lib/dates";
+import type { GmailSyncResponse, MoodleSyncResponse, RawEmail, SyncMeUser, SyncTask, TaskCategory } from "@/lib/types";
+import { TASK_CATEGORIES } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import {
-  CATEGORY_STYLES,
-  PRIORITY_DOTS,
-  PRIORITY_STYLES,
-  TASK_CATEGORIES,
-  type GmailSyncResponse,
-  type MoodleSyncResponse,
-  type RawEmail,
-  type SyncMeUser,
-  type SyncTask,
-  type TaskCategory,
-  type TaskPriority,
-} from "@/lib/types";
 
 const POLL_INTERVAL_MS = 30_000;
 const MOODLE_URL_KEY = "syncme_moodle_ics_url";
@@ -72,8 +42,9 @@ const GMAIL_TASKS_KEY = "syncme_gmail_tasks_v1";
 const MOODLE_TASKS_KEY = "syncme_moodle_tasks_v1";
 const EMAILS_KEY = "syncme_emails_v1";
 const DONE_KEY = "syncme_done_v1";
+/** When each task was marked done (powers the "Done this week" tile). */
+const DONE_AT_KEY = "syncme_done_at_v1";
 
-/** Marks the user as handled — SyncMe skips these emails forever after. */
 function loadJson<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
   try {
@@ -92,21 +63,25 @@ function saveJson(key: string, value: unknown): void {
   }
 }
 
+function tagSource(tasks: SyncTask[], source: "Gmail" | "Moodle"): SyncTask[] {
+  return tasks.map((t) => ({ ...t, source }));
+}
+
 /**
  * Union merge: fresh tasks overwrite their previous version, tasks that were
  * extracted earlier are kept even if this sync missed them, and done tasks
- * never come back. Expired entries (dated strictly before today) are pruned —
- * the dashboard can never resurrect the past.
+ * never come back. Entries older than two days are pruned — the Overdue
+ * group still gets a chance to warn, the past never piles up.
  */
 function mergeTasks(prev: SyncTask[], next: SyncTask[], done: Set<string>): SyncTask[] {
   const byId = new Map<string, SyncTask>();
   for (const t of prev) if (!done.has(t.id)) byId.set(t.id, t);
   for (const t of next) if (!done.has(t.id)) byId.set(t.id, t);
-  const today = budapestTodayKey();
+  const floorKey = addDaysKey(budapestTodayKey(), -2);
   return [...byId.values()]
     .filter((t) => {
       const day = dayKeyOf(t.dueDate);
-      return day === null || day >= today;
+      return day === null || day >= floorKey;
     })
     .slice(0, 80);
 }
@@ -116,13 +91,6 @@ function mergeEmails(prev: RawEmail[], next: RawEmail[]): RawEmail[] {
   for (const e of prev) byId.set(e.id, e);
   for (const e of next) byId.set(e.id, e);
   return [...byId.values()].sort((a, b) => Date.parse(b.date) - Date.parse(a.date)).slice(0, 50);
-}
-
-function formatDue(dueDate: string): string {
-  if (dueDate === "unknown") return "No date detected";
-  const d = new Date(dueDate);
-  if (Number.isNaN(d.getTime())) return "No date detected";
-  return format(d, "EEE, d MMM · HH:mm");
 }
 
 /** Sort key: normalized Budapest ISO parsed as ms; undated tasks sink to the end. */
@@ -144,103 +112,71 @@ function greetingOf(d: Date): string {
   return "Good evening";
 }
 
-/** Human label for a `YYYY-MM-DD` day key: "Tomorrow • Nov 25", "Thu • Nov 26", … */
-function dayLabel(dayKey: string, todayKey: string): string {
-  const d = new Date(`${dayKey}T12:00:00Z`);
-  const sameYear = d.getUTCFullYear() === new Date().getUTCFullYear();
-  const datePart = `${format(d, "MMM d")}${sameYear ? "" : `, ${format(d, "yyyy")}`}`;
-  if (dayKey === addDaysKey(todayKey, 1)) return `Tomorrow • ${datePart}`;
-  return `${format(d, "EEE")} • ${datePart}`;
+/** Strict https check for the Moodle .ics feed URL (client side validation). */
+function isValidHttpsUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
-/** A friendly icon per category — natural metaphors instead of tech jargon. */
-const CATEGORY_ICONS: Record<TaskCategory, LucideIcon> = {
-  Neptun: GraduationCap,
-  Moodle: BookOpen,
-  Medical: HeartPulse,
-  Immigration: Stamp,
-};
+/** Button classes reused across the dashboard. */
+const BUTTON_PRIMARY =
+  "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-black px-3 py-2 button-md text-white transition-colors duration-300 ease-base hover:bg-[#262626] active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:pointer-events-none disabled:opacity-50";
+const BUTTON_SECONDARY =
+  "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-white px-3 py-2 button-md text-black transition-colors duration-300 ease-base hover:bg-alt active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:pointer-events-none disabled:opacity-50";
 
-const PRIORITY_RANK: Record<TaskPriority, number> = { High: 0, Medium: 1, Low: 2 };
+/** Skeleton shaped exactly like the real task card, slow opacity pulse. */
+function TaskCardSkeleton() {
+  return (
+    <div aria-hidden="true" className="flex items-start gap-3 rounded-2xl border border-border bg-white p-4">
+      <span className="skeleton-soft mt-1 h-6 w-6 shrink-0 rounded-full bg-inset" />
+      <span className="skeleton-soft h-10 w-10 shrink-0 rounded-full bg-inset" />
+      <div className="min-w-0 flex-1 space-y-2">
+        <span className="skeleton-soft block h-4 w-1/3 rounded bg-inset" />
+        <span className="skeleton-soft block h-3 w-2/3 rounded bg-inset" />
+        <span className="skeleton-soft block h-3 w-1/2 rounded bg-inset" />
+      </div>
+      <span className="skeleton-soft h-5 w-16 shrink-0 rounded-full bg-inset" />
+    </div>
+  );
+}
 
+/** One task row in the date groups: entrance, completing fade, layout close-up. */
 function TaskRow({
   task,
   index,
-  onDone,
-  highlight = false,
+  completing,
+  onOpen,
+  onToggleDone,
 }: {
   task: SyncTask;
   index: number;
-  onDone: (task: SyncTask) => void;
-  highlight?: boolean;
+  completing: boolean;
+  onOpen: (task: SyncTask) => void;
+  onToggleDone: (task: SyncTask) => void;
 }) {
-  const cat = CATEGORY_STYLES[task.category];
-  const CatIcon = CATEGORY_ICONS[task.category];
-  const due = dueMsOf(task);
-  const urgent = !Number.isNaN(due) && due - Date.now() > 0 && due - Date.now() < 48 * 3_600_000;
   return (
     <motion.li
-      initial={{ opacity: 0, x: -8 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1], delay: Math.min(index * 0.035, 0.3) }}
+      layout
+      initial={{ opacity: 0, y: 16 }}
+      animate={completing ? { opacity: 0, x: 8 } : { opacity: 1, x: 0, y: 0 }}
+      transition={{
+        duration: completing ? 0.3 : 0.4,
+        ease: BASE_CURVE,
+        delay: completing ? 0 : Math.min(index * 0.04, 0.25),
+      }}
       className="list-none"
     >
-      <div
-        title={`From: ${task.sourceEmailSubject}`}
-        className={cn(
-          "flex items-start gap-3 rounded-2xl border px-4 py-3 transition-all duration-300 ease-base sm:px-5",
-          highlight
-            ? "border-primary/30 bg-primary/[0.05] shadow-soft hover:shadow-lift"
-            : "border-border/60 bg-card shadow-soft hover:border-primary/30 hover:shadow-lift",
-        )}
-      >
-        {/* Exact time badge — the anchor of the chronological timeline. */}
-        <span
-          suppressHydrationWarning
-          className={cn(
-            "mt-0.5 inline-flex h-9 min-w-[3.4rem] shrink-0 items-center justify-center rounded-xl px-2 text-[13px] font-bold tabular-nums",
-            urgent
-              ? "bg-rose-400/12 text-rose-300 ring-1 ring-inset ring-rose-400/30"
-              : "bg-muted text-foreground",
-          )}
-        >
-          {timeBadgeOf(task.dueDate)}
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <h3 className="text-sm font-semibold leading-snug text-foreground">{task.title}</h3>
-            {task.priority === "High" && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-rose-400/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-300 ring-1 ring-inset ring-rose-400/30">
-                High priority
-              </span>
-            )}
-          </div>
-          <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1">
-            <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium", cat.chip)}>
-              <CatIcon className="h-3 w-3" aria-hidden="true" />
-              {task.category}
-            </span>
-            <span
-              className={cn("inline-flex items-center gap-1 text-[11px] font-semibold", PRIORITY_STYLES[task.priority])}
-            >
-              <span className={cn("h-1.5 w-1.5 rounded-full", PRIORITY_DOTS[task.priority])} aria-hidden="true" />
-              {task.priority}
-            </span>
-          </div>
-          <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
-            {task.actionSummary}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => onDone(task)}
-          aria-label={`Mark "${task.title}" as done`}
-          title="Mark as done — SyncMe will skip this email from now on"
-          className="-mr-1 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted-foreground/40 transition-colors duration-300 ease-base hover:bg-emerald-400/10 hover:text-emerald-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring active:scale-95"
-        >
-          <CircleCheck className="h-[18px] w-[18px]" />
-        </button>
-      </div>
+      <TaskCard
+        task={task}
+        onOpen={onOpen}
+        onToggleDone={onToggleDone}
+        done={completing}
+        showUrgency
+      />
     </motion.li>
   );
 }
@@ -252,18 +188,27 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
   const [syncing, setSyncing] = useState(!isDemo);
   const [lastSync, setLastSync] = useState<Date | null>(null);
   const [connected, setConnected] = useState(true);
-  const [aiStatus, setAiStatus] = useState<"ai" | "heuristic" | null>(null);
   const [engine, setEngine] = useState<"gemini" | "zai" | "rule" | null>(null);
   const [doneIds, setDoneIds] = useState<Set<string>>(new Set());
+  const [doneAt, setDoneAt] = useState<Record<string, string>>({});
   const [moodleConnected, setMoodleConnected] = useState(false);
   const [filter, setFilter] = useState<"All" | TaskCategory>("All");
-  const [moodleOpen, setMoodleOpen] = useState(false);
   const [moodleUrl, setMoodleUrl] = useState("");
   const [moodleConnecting, setMoodleConnecting] = useState(false);
+  const [moodleError, setMoodleError] = useState<string | null>(null);
+  const [moodleSuccess, setMoodleSuccess] = useState<string | null>(null);
+  const [drawerTask, setDrawerTask] = useState<SyncTask | null>(null);
+  const [emailsOpen, setEmailsOpen] = useState(false);
+  const [completingIds, setCompletingIds] = useState<Set<string>>(new Set());
   const [todayKey, setTodayKey] = useState<string>(() => budapestTodayKey());
+  const [, setTick] = useState(0);
+  const isMobile = useIsMobile();
 
-  /** Ref mirror of doneIds so the 30s polling merge never resurrects done tasks. */
+  /** Ref mirrors so the 30s polling merge never resurrects done tasks. */
   const doneRef = useRef<Set<string>>(new Set());
+  const completingRef = useRef<Set<string>>(new Set());
+  const lastDoneRef = useRef<{ task: SyncTask; origin: "gmail" | "moodle" } | null>(null);
+  const moodleInputRef = useRef<HTMLInputElement>(null);
 
   // ── Keep the Budapest "today" key fresh (handles midnight rollover) ────────
   useEffect(() => {
@@ -273,17 +218,31 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
     return () => clearInterval(timer);
   }, []);
 
+  // ── Ticks the "Synced X seconds ago" chip ──────────────────────────────────
+  useEffect(() => {
+    const timer = setInterval(() => setTick((t) => t + 1), 10_000);
+    return () => clearInterval(timer);
+  }, []);
+
   // ── Restore the persisted session state before the first sync fires ───────
   useEffect(() => {
-    if (isDemo) return;
+    if (isDemo) {
+      setDoneAt(Object.fromEntries(DEMO_DONE.map((d) => [d.id, d.at])));
+      return;
+    }
     const savedTasks = loadJson<SyncTask[]>(GMAIL_TASKS_KEY, []);
     const savedMoodle = loadJson<SyncTask[]>(MOODLE_TASKS_KEY, []);
     const savedEmails = loadJson<RawEmail[]>(EMAILS_KEY, []);
-    const savedDone = loadJson<string[]>(DONE_KEY, []);
-    doneRef.current = new Set(savedDone);
-    setDoneIds(new Set(savedDone));
-    setGmailTasks((prev) => (prev.length === 0 ? savedTasks : prev));
-    setMoodleTasks((prev) => (prev.length === 0 ? savedMoodle : prev));
+    const legacyDone = loadJson<string[]>(DONE_KEY, []);
+    const savedDoneAt = loadJson<Record<string, string>>(DONE_AT_KEY, {});
+    const mergedDoneAt: Record<string, string> = { ...savedDoneAt };
+    for (const id of legacyDone) if (!mergedDoneAt[id]) mergedDoneAt[id] = new Date().toISOString();
+    const ids = new Set<string>([...legacyDone, ...Object.keys(savedDoneAt)]);
+    doneRef.current = ids;
+    setDoneIds(ids);
+    setDoneAt(mergedDoneAt);
+    setGmailTasks((prev) => (prev.length === 0 ? tagSource(savedTasks, "Gmail") : prev));
+    setMoodleTasks((prev) => (prev.length === 0 ? tagSource(savedMoodle, "Moodle") : prev));
     setEmails((prev) => (prev.length === 0 ? savedEmails : prev));
     if (savedMoodle.length > 0) setMoodleConnected(true);
   }, [isDemo]);
@@ -301,6 +260,9 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
   useEffect(() => {
     if (!isDemo) saveJson(DONE_KEY, [...doneIds]);
   }, [doneIds, isDemo]);
+  useEffect(() => {
+    if (!isDemo) saveJson(DONE_AT_KEY, doneAt);
+  }, [doneAt, isDemo]);
 
   // ── Gmail sync (also runs on load and polls every 30s) ────────────────────
   const syncNow = useCallback(
@@ -327,30 +289,30 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
               });
             }
           } else if (!silent) {
-            toast.error("Sync failed", { description: data.error ?? `HTTP ${res.status}` });
+            toast.error("Gmail sync failed. Reconnect Google to continue.", {
+              description: data.error ?? `HTTP ${res.status}`,
+            });
           }
           return;
         }
         // Merge instead of replace: previously synced tasks never fade away.
-        setGmailTasks((prev) => mergeTasks(prev, data.tasks, doneRef.current));
+        setGmailTasks((prev) => mergeTasks(prev, tagSource(data.tasks, "Gmail"), doneRef.current));
         setEmails((prev) => mergeEmails(prev, data.emails));
-        setAiStatus(data.aiStatus);
         setEngine(data.engine ?? null);
         setConnected(true);
         setLastSync(new Date());
         if (!silent) {
-          toast.success(
-            `${data.tasks.length} task${data.tasks.length === 1 ? "" : "s"} extracted`,
-            {
-              description:
-                data.aiStatus === "heuristic"
-                  ? "AI was unavailable — used the rule-based extractor."
-                  : `${data.engine === "gemini" ? "Gemini" : "GLM"} scanned ${data.emails.length} university email${data.emails.length === 1 ? "" : "s"} (last 30 days).`,
-            },
-          );
+          toast.success(`${data.tasks.length} task${data.tasks.length === 1 ? "" : "s"} extracted`, {
+            description:
+              data.engine === "rule"
+                ? "The AI was unavailable, so the rule based extractor ran instead."
+                : `${data.engine === "gemini" ? "Gemini" : "GLM"} scanned ${data.emails.length} university email${
+                    data.emails.length === 1 ? "" : "s"
+                  } from the last 30 days.`,
+          });
         }
       } catch (err) {
-        if (!silent) toast.error("Sync failed", { description: String(err) });
+        if (!silent) toast.error("Gmail sync failed. Reconnect Google to continue.", { description: String(err) });
       } finally {
         setSyncing(false);
       }
@@ -365,42 +327,46 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
     return () => clearInterval(timer);
   }, [isDemo, syncNow]);
 
-  // ── Moodle .ics connect ────────────────────────────────────────────────────
-  const connectMoodle = useCallback(
-    async (url: string, silent = false) => {
-      if (!/^https?:\/\/.+/i.test(url)) {
-        if (!silent) toast.error("Invalid calendar URL", { description: "Paste a full http(s) .ics export URL." });
+  // ── Moodle .ics connect (inline rail card, client side validation) ────────
+  const connectMoodle = useCallback(async (url: string, silent = false) => {
+    if (!isValidHttpsUrl(url)) {
+      if (!silent) {
+        setMoodleSuccess(null);
+        setMoodleError("That link is not a valid calendar feed. Copy the private .ics link from elearning.unideb.hu.");
+      }
+      return;
+    }
+    setMoodleConnecting(true);
+    try {
+      const res = await fetch("/api/moodle/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ icsUrl: url }),
+      });
+      const data = (await res.json()) as MoodleSyncResponse;
+      if (!res.ok || !data.ok) {
+        if (!silent) {
+          setMoodleSuccess(null);
+          setMoodleError(data.error ?? "Moodle sync failed. Check the link and try again.");
+        }
         return;
       }
-      setMoodleConnecting(true);
-      try {
-        const res = await fetch("/api/moodle/sync", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ icsUrl: url }),
-        });
-        const data = (await res.json()) as MoodleSyncResponse;
-        if (!res.ok || !data.ok) {
-          if (!silent) toast.error("Moodle sync failed", { description: data.error ?? `HTTP ${res.status}` });
-          return;
-        }
-        setMoodleTasks((prev) => mergeTasks(prev, data.tasks, doneRef.current));
-        setMoodleConnected(true);
-        window.localStorage.setItem(MOODLE_URL_KEY, url);
-        if (!silent) {
-          toast.success(`${data.tasks.length} Moodle event${data.tasks.length === 1 ? "" : "s"} imported`, {
-            description: "Deadlines from your e-learning calendar now appear alongside Gmail tasks.",
-          });
-          setMoodleOpen(false);
-        }
-      } catch (err) {
-        if (!silent) toast.error("Moodle sync failed", { description: String(err) });
-      } finally {
-        setMoodleConnecting(false);
+      setMoodleTasks((prev) => mergeTasks(prev, tagSource(data.tasks, "Moodle"), doneRef.current));
+      setMoodleConnected(true);
+      window.localStorage.setItem(MOODLE_URL_KEY, url);
+      if (!silent) {
+        setMoodleError(null);
+        setMoodleSuccess("Calendar saved. Next sync in 30 seconds.");
       }
-    },
-    [],
-  );
+    } catch (err) {
+      if (!silent) {
+        setMoodleSuccess(null);
+        setMoodleError(`Moodle sync failed. ${String(err)}`);
+      }
+    } finally {
+      setMoodleConnecting(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (isDemo) return;
@@ -411,18 +377,60 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
     }
   }, [isDemo, connectMoodle]);
 
-  /** Mark as done: hidden now, skipped by every future sync, remembered forever. */
-  const markTaskDone = useCallback((task: SyncTask) => {
-    const next = new Set(doneRef.current);
-    next.add(task.id);
-    doneRef.current = next;
-    setDoneIds(next);
-    setGmailTasks((prev) => prev.filter((t) => t.id !== task.id));
-    setMoodleTasks((prev) => prev.filter((t) => t.id !== task.id));
-    toast.success("Marked as done", {
-      description: `SyncMe will skip "${task.title}" from now on.`,
+  // ── Mark done: fade out, then remove; undo brings it straight back ────────
+  const markTaskDone = useCallback(
+    (task: SyncTask) => {
+      const origin = moodleTasks.some((t) => t.id === task.id) ? "moodle" : "gmail";
+      lastDoneRef.current = { task, origin };
+      const nextDone = new Set(doneRef.current);
+      nextDone.add(task.id);
+      doneRef.current = nextDone;
+      setDoneIds(nextDone);
+      setDoneAt((prev) => ({ ...prev, [task.id]: new Date().toISOString() }));
+      setGmailTasks((prev) => prev.filter((t) => t.id !== task.id));
+      setMoodleTasks((prev) => prev.filter((t) => t.id !== task.id));
+      if (drawerTask?.id === task.id) setDrawerTask(null);
+      toast.success("Task marked done", {
+        description: `SyncMe will skip "${task.title}" from now on.`,
+        action: { label: "Undo", onClick: () => undoDone() },
+      });
+    },
+    [moodleTasks, drawerTask],
+  );
+
+  const undoDone = useCallback(() => {
+    const entry = lastDoneRef.current;
+    if (!entry) return;
+    const { task, origin } = entry;
+    lastDoneRef.current = null;
+    const nextDone = new Set(doneRef.current);
+    nextDone.delete(task.id);
+    doneRef.current = nextDone;
+    setDoneIds(nextDone);
+    setDoneAt((prev) => {
+      const copy = { ...prev };
+      delete copy[task.id];
+      return copy;
     });
+    const restore = (prev: SyncTask[]) => sortChronologically([task, ...prev.filter((t) => t.id !== task.id)]);
+    if (origin === "moodle") setMoodleTasks(restore);
+    else setGmailTasks(restore);
+    toast.success("Task restored", { description: `"${task.title}" is back on your dashboard.` });
   }, []);
+
+  const startComplete = useCallback(
+    (task: SyncTask) => {
+      if (completingRef.current.has(task.id)) return;
+      completingRef.current.add(task.id);
+      setCompletingIds(new Set(completingRef.current));
+      window.setTimeout(() => {
+        completingRef.current.delete(task.id);
+        setCompletingIds(new Set(completingRef.current));
+        markTaskDone(task);
+      }, 320);
+    },
+    [markTaskDone],
+  );
 
   const logout = useCallback(async () => {
     try {
@@ -433,109 +441,247 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
   }, []);
 
   // ── Derived data ───────────────────────────────────────────────────────────
-  const allTasks = useMemo(() => {
-    const merged = [...gmailTasks, ...moodleTasks];
-    // Strict ascending chronological order — earliest date/time first, undated last.
-    return [...merged].sort((a, b) => dueMsOf(a) - dueMsOf(b));
-  }, [gmailTasks, moodleTasks]);
-
-  /** Client-side date guard: expired tasks can never render (covers demo data too). */
-  const visibleTasks = useMemo(() => {
-    const list = filter === "All" ? allTasks : allTasks.filter((t) => t.category === filter);
-    return list.filter((t) => {
-      const day = dayKeyOf(t.dueDate);
-      return day === null || day >= todayKey;
-    });
-  }, [allTasks, filter, todayKey]);
-
-  /** Section 1 — everything due today: High priority first, then by time. */
-  const focusTasks = useMemo(
-    () =>
-      visibleTasks
-        .filter((t) => dayKeyOf(t.dueDate) === todayKey)
-        .sort((a, b) => PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority] || dueMsOf(a) - dueMsOf(b)),
-    [visibleTasks, todayKey],
+  const allTasks = useMemo(
+    () => sortChronologically([...gmailTasks, ...moodleTasks]),
+    [gmailTasks, moodleTasks],
   );
 
-  /** Section 2 — everything after today, grouped by day, strictly ascending. */
-  const upcomingDays = useMemo(() => {
-    const groups = new Map<string, SyncTask[]>();
+  const filteredTasks = useMemo(
+    () => (filter === "All" ? allTasks : allTasks.filter((t) => t.category === filter)),
+    [allTasks, filter],
+  );
+
+  /**
+   * Date groups: Overdue (past due and not done), Today, Tomorrow, This week
+   * (within 7 days), Later (beyond 7 days, undated tasks sink here). Each
+   * group is strictly ascending by date and time.
+   */
+  const dateGroups = useMemo(() => {
+    const tomorrowKey = addDaysKey(todayKey, 1);
+    const weekEndKey = addDaysKey(todayKey, 7);
+    const overdue: SyncTask[] = [];
+    const today: SyncTask[] = [];
+    const tomorrow: SyncTask[] = [];
+    const week: SyncTask[] = [];
+    const later: SyncTask[] = [];
     const undated: SyncTask[] = [];
-    for (const t of visibleTasks) {
-      const day = dayKeyOf(t.dueDate);
-      if (day === null) {
+    for (const t of filteredTasks) {
+      const normalized = normalizeDueDate(t.dueDate);
+      if (normalized === "unknown") {
         undated.push(t);
         continue;
       }
-      if (day <= todayKey) continue; // today lives in Today's Focus
-      const bucket = groups.get(day);
-      if (bucket) bucket.push(t);
-      else groups.set(day, [t]);
+      const day = normalized.slice(0, 10);
+      const ms = Date.parse(normalized);
+      if (day < todayKey || (day === todayKey && ms <= Date.now())) overdue.push(t);
+      else if (day === todayKey) today.push(t);
+      else if (day === tomorrowKey) tomorrow.push(t);
+      else if (day <= weekEndKey) week.push(t);
+      else later.push(t);
     }
-    const days = [...groups.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([day, items]) => ({ key: day, items: items.sort((a, b) => dueMsOf(a) - dueMsOf(b)) }));
-    if (undated.length > 0) days.push({ key: "undated", items: undated });
-    return days;
-  }, [visibleTasks, todayKey]);
+    const byTime = (a: SyncTask, b: SyncTask) => dueMsOf(a) - dueMsOf(b);
+    const groups: { key: string; label: string; items: SyncTask[] }[] = [
+      { key: "overdue", label: "Overdue", items: [...overdue].sort(byTime) },
+      { key: "today", label: "Today", items: [...today].sort(byTime) },
+      { key: "tomorrow", label: "Tomorrow", items: [...tomorrow].sort(byTime) },
+      { key: "week", label: "This week", items: [...week].sort(byTime) },
+      { key: "later", label: "Later", items: [...later].sort(byTime).concat(undated) },
+    ];
+    return groups.filter((g) => g.items.length > 0);
+  }, [filteredTasks, todayKey]);
 
-  /** The very next chronological task — previewed when today is clear. */
-  const nextTask = upcomingDays[0]?.items[0] ?? null;
+  /** Days holding two or more deadlines — rendered as amber conflict groups. */
+  const conflictMap = useMemo(() => {
+    const byDay = new Map<string, SyncTask[]>();
+    for (const t of allTasks) {
+      const day = dayKeyOf(t.dueDate);
+      if (!day) continue;
+      const bucket = byDay.get(day);
+      if (bucket) bucket.push(t);
+      else byDay.set(day, [t]);
+    }
+    const map = new Map<string, SyncTask[]>();
+    for (const [day, items] of byDay) if (items.length >= 2) map.set(day, items);
+    return map;
+  }, [allTasks]);
 
-  const conflicts = useMemo(() => findConflicts(visibleTasks), [visibleTasks]);
+  const nextConflict = useMemo(() => {
+    const entries = [...conflictMap.entries()].sort(([a], [b]) => a.localeCompare(b));
+    return entries[0] ?? null;
+  }, [conflictMap]);
+
+  const dueTodayCount = useMemo(
+    () => allTasks.filter((t) => dayKeyOf(t.dueDate) === todayKey).length,
+    [allTasks, todayKey],
+  );
+  const next7Count = useMemo(() => {
+    const weekEndKey = addDaysKey(todayKey, 7);
+    return allTasks.filter((t) => {
+      const day = dayKeyOf(t.dueDate);
+      return day !== null && day > todayKey && day <= weekEndKey;
+    }).length;
+  }, [allTasks, todayKey]);
+  const doneThisWeek = useMemo(() => {
+    const cutoff = Date.now() - 7 * 86_400_000;
+    return Object.values(doneAt).filter((at) => Date.parse(at) > cutoff).length;
+  }, [doneAt]);
 
   const categoryCounts = useMemo(() => {
-    const counts = new Map<"All" | TaskCategory, number>([["All", visibleTasks.length]]);
-    for (const c of TASK_CATEGORIES) counts.set(c, visibleTasks.filter((t) => t.category === c).length);
+    const counts = new Map<string, number>([["All", allTasks.length]]);
+    for (const c of TASK_CATEGORIES) counts.set(c, allTasks.filter((t) => t.category === c).length);
     return counts;
-  }, [visibleTasks]);
+  }, [allTasks]);
 
-  const totalUpcoming = upcomingDays.reduce((sum, g) => sum + g.items.length, 0);
   const showSkeletons = syncing && allTasks.length === 0;
   const firstName = user.name.trim().split(/\s+/)[0] || "there";
+  const weekTotal = dueTodayCount + next7Count;
+
+  // ── Segmented filter: measured sliding indicator (transform based) ────────
+  const FILTERS = useMemo(() => ["All", ...TASK_CATEGORIES] as const, []);
+  const activeIndex = FILTERS.indexOf(filter);
+  const segRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const [indicator, setIndicator] = useState({ left: 0, width: 0 });
+
+  useLayoutEffect(() => {
+    const measure = () => {
+      const el = segRefs.current[activeIndex];
+      if (el) setIndicator({ left: el.offsetLeft, width: el.offsetWidth });
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [activeIndex, filter]);
+
+  const syncLabel = useMemo(() => {
+    if (!lastSync) return isDemo ? "Demo mode" : connected ? "Ready" : "Not connected";
+    const s = Math.max(0, Math.floor((Date.now() - lastSync.getTime()) / 1000));
+    if (s < 60) return `Synced ${s} second${s === 1 ? "" : "s"} ago`;
+    const m = Math.floor(s / 60);
+    return `Synced ${m} minute${m === 1 ? "" : "s"} ago`;
+  }, [lastSync, isDemo, connected]);
+
+  const drawerEmail = drawerTask
+    ? (emails.find((e) => e.subject === drawerTask.sourceEmailSubject) ?? null)
+    : null;
+
+  const focusMoodleInput = () => {
+    moodleInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    moodleInputRef.current?.focus();
+  };
+
+  /** Renders a group's cards, wrapping consecutive same day pairs in a conflict container. */
+  const renderGroupItems = (items: SyncTask[]): React.ReactNode[] => {
+    const runs: { day: string | null; items: SyncTask[] }[] = [];
+    for (const t of items) {
+      const day = dayKeyOf(t.dueDate);
+      const last = runs[runs.length - 1];
+      if (last && last.day === day) last.items.push(t);
+      else runs.push({ day, items: [t] });
+    }
+    let cursor = 0;
+    return runs.map((run, runIndex) => {
+      const start = cursor;
+      cursor += run.items.length;
+      const conflicted = run.day !== null && run.items.length >= 2 && conflictMap.has(run.day);
+      if (conflicted && run.day) {
+        const label = format(new Date(`${run.day}T12:00:00`), "EEEE d MMM");
+        return (
+          <ConflictGroup key={run.day} dateLabel={label} count={run.items.length}>
+            {run.items.map((t, j) => (
+              <TaskRow
+                key={t.id}
+                task={t}
+                index={start + j}
+                completing={completingIds.has(t.id)}
+                onOpen={setDrawerTask}
+                onToggleDone={startComplete}
+              />
+            ))}
+          </ConflictGroup>
+        );
+      }
+      return run.items.map((t, j) => (
+        <TaskRow
+          key={t.id}
+          task={t}
+          index={start + j}
+          completing={completingIds.has(t.id)}
+          onOpen={setDrawerTask}
+          onToggleDone={startComplete}
+        />
+      ));
+    });
+  };
 
   return (
-    <div className="flex min-h-screen flex-col text-foreground">
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-40 border-b border-border/70 bg-background/75 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
+    <div className="flex min-h-screen flex-col bg-background text-foreground">
+      {/* ── Floating dashboard navigation ──────────────────────────────────── */}
+      <header className="fixed inset-x-0 top-0 z-50 px-4 pt-4">
+        <div className="mx-auto flex w-fit items-center gap-2 rounded-2xl border border-border bg-white/80 py-1.5 pl-3 pr-2 shadow-sm backdrop-blur-md">
           <Logo />
-          <div className="flex items-center gap-2 sm:gap-3">
-            {isDemo && (
-              <Badge variant="outline" className="gap-1.5 border-primary/40 bg-primary/10 text-primary">
-                <FlaskConical className="h-3 w-3" />
-                Demo
-              </Badge>
-            )}
-            <div className="flex items-center gap-2">
-              <Avatar className="h-8 w-8">
-                {user.picture ? <AvatarImage src={user.picture} alt={`${user.name}'s profile photo`} /> : null}
-                <AvatarFallback className="bg-secondary text-xs font-semibold">
-                  {initialsOf(user.name)}
-                </AvatarFallback>
-              </Avatar>
-              <div className="hidden min-w-0 sm:block">
-                <p className="truncate text-xs font-semibold leading-tight text-foreground">{user.name}</p>
-                <p className="truncate text-xs leading-tight text-muted-foreground">{user.email}</p>
-              </div>
-            </div>
-            <Button variant="outline" size="sm" onClick={() => void logout()} className="gap-1.5">
-              <LogOut className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Logout</span>
-            </Button>
-          </div>
+          <span aria-hidden="true" className="hidden h-5 w-px bg-border sm:block" />
+          <span className="caption-3 hidden rounded-full bg-black px-2.5 py-1 text-white sm:inline-flex">Dashboard</span>
+          <span
+            suppressHydrationWarning
+            className="caption-4 hidden min-[480px]:inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[#666666]"
+          >
+            <ArrowsClockwise className="h-3.5 w-3.5" aria-hidden="true" />
+            {syncLabel}
+          </span>
+          {isDemo && (
+            <span className="caption-4 inline-flex items-center gap-1.5 rounded-full border border-border px-2 py-1 text-[#666666]">
+              <Flask className="h-3.5 w-3.5" aria-hidden="true" />
+              Demo
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => setEmailsOpen(true)}
+            aria-label="Open raw emails"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-[#666666] transition-colors duration-300 ease-base hover:bg-alt hover:text-black focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black active:scale-[0.98]"
+          >
+            <List className="h-4 w-4" aria-hidden="true" />
+          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                aria-label="Account menu"
+                className="inline-flex h-11 w-11 items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+              >
+                <Avatar className="h-9 w-9 border border-border">
+                  {user.picture ? <AvatarImage src={user.picture} alt={`${user.name}'s profile photo`} /> : null}
+                  <AvatarFallback className="bg-inset caption-3 text-black">{initialsOf(user.name)}</AvatarFallback>
+                </Avatar>
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56 rounded-lg border-border">
+              <DropdownMenuLabel className="py-2">
+                <span className="caption-3 block truncate text-black">{user.name}</span>
+                <span className="caption-4 block truncate text-[#666666]">{user.email}</span>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => void logout()} className="gap-2 caption-1">
+                <SignOut className="h-4 w-4" aria-hidden="true" />
+                Log out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
 
-      <main id="main" className="mx-auto w-full max-w-6xl flex-1 px-4 pb-14 pt-6 sm:px-6">
+      <main id="main" className="mx-auto w-full max-w-6xl flex-1 px-4 pb-16 pt-28 sm:px-6 sm:pt-32">
         {/* ── Demo banner ──────────────────────────────────────────────────── */}
         {isDemo && (
-          <div className="mb-5 flex flex-wrap items-center gap-2 rounded-2xl border border-primary/25 bg-primary/[0.06] px-4 py-3 text-sm shadow-soft">
-            <FlaskConical className="h-4 w-4 shrink-0 text-primary" />
-            <p className="text-muted-foreground">
-              <strong className="font-semibold text-primary">Demo Sandbox</strong> — simulated Debrecen
-              inbox. No Gmail account is connected;{" "}
-              <a href="/api/auth/google" className="text-primary underline underline-offset-4">
+          <div className="mb-6 flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-alt px-4 py-3">
+            <Flask className="h-4 w-4 shrink-0 text-[#666666]" aria-hidden="true" />
+            <p className="body-6 text-[#666666]">
+              <span className="font-semibold text-black">Demo sandbox.</span> Simulated Debrecen inbox. No Gmail
+              account is connected;{" "}
+              <a
+                href="/api/auth/google"
+                className="underline underline-offset-4 transition-colors duration-300 ease-base hover:text-black"
+              >
                 connect real Gmail
               </a>{" "}
               to run the live pipeline.
@@ -543,377 +689,376 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
           </div>
         )}
 
-        {/* ── Section 1 · Today's Focus (morning briefing) ─────────────────── */}
-        <section
-          aria-label="Today's focus"
-          className="rounded-3xl border border-border/70 bg-card p-5 shadow-soft sm:p-7"
-        >
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.2em] text-primary">
-                <Sun className="h-3.5 w-3.5" aria-hidden="true" />
-                Today&apos;s Focus
-              </p>
-              <h1
-                suppressHydrationWarning
-                className="mt-2.5 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl"
-              >
-                {greetingOf(new Date())}, {firstName}.
-              </h1>
-              <p suppressHydrationWarning className="mt-1 text-sm text-muted-foreground">
-                {format(new Date(), "EEEE, MMM d")} — your focus today.
-              </p>
-            </div>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground">
-              {focusTasks.length} due today
-            </span>
-          </div>
-
-          {focusTasks.length > 0 ? (
-            <ul className="mt-5 space-y-2.5">
-              {focusTasks.map((t, i) => (
-                <TaskRow key={t.id} task={t} index={i} onDone={markTaskDone} />
-              ))}
-            </ul>
-          ) : nextTask ? (
-            <div className="mt-5 rounded-2xl border border-border/60 bg-muted/50 px-4 py-4 sm:px-5">
-              <p className="text-sm leading-relaxed text-muted-foreground">
-                Your schedule is clear today — here is your next upcoming deadline:
-              </p>
-              <ul className="mt-3">
-                <TaskRow task={nextTask} index={0} onDone={markTaskDone} highlight />
-              </ul>
-            </div>
-          ) : (
-            <div className="mt-5 flex flex-wrap items-center justify-center gap-3 rounded-2xl border border-dashed border-border/60 px-4 py-8 text-center">
-              <Sun className="h-5 w-5 shrink-0 text-primary/70" aria-hidden="true" />
-              <p className="text-sm text-muted-foreground">
-                Your schedule is clear today. Nothing is due — enjoy the calm.
-              </p>
-            </div>
-          )}
-        </section>
-
-        {/* ── Toolbar ──────────────────────────────────────────────────────── */}
-        <div className="mt-7 flex flex-wrap items-center gap-3">
-          <Button
-            onClick={() => void syncNow()}
-            disabled={syncing || (!isDemo && !connected)}
-            className="gap-2 font-semibold shadow-btn-accent"
+        {/* ── Inline error: Gmail disconnected ─────────────────────────────── */}
+        {!connected && !isDemo && (
+          <div
+            role="alert"
+            className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-status-high bg-status-high-bg p-6"
           >
-            {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            Sync Gmail Now
-          </Button>
-          <span className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3.5 py-1.5 text-xs text-muted-foreground">
-            <span
-              suppressHydrationWarning
-              className={cn(
-                "h-2 w-2 rounded-full",
-                isDemo ? "bg-primary live-dot" : connected ? "bg-emerald-400" : "bg-zinc-500",
-              )}
-            />
-            {isDemo ? "Demo mode" : connected ? "Gmail connected" : "Gmail disconnected"}
-            {lastSync && (
-              <span suppressHydrationWarning className="text-muted-foreground/60">
-                · synced {format(lastSync, "HH:mm:ss")}
-              </span>
-            )}
-          </span>
-
-          <div className="ml-auto flex flex-wrap items-center gap-2">
-            <Sheet>
-              <SheetTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-1.5">
-                  <MailWarning className="h-3.5 w-3.5" />
-                  Raw emails ({emails.length})
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="right" className="w-full border-border bg-card shadow-lift sm:max-w-md">
-                <SheetHeader>
-                  <SheetTitle>Raw emails</SheetTitle>
-                  <SheetDescription>
-                    Last 30 days, academic, educational, immigration, health and professional mail only.
-                    Emails you already answered are skipped. Fetched live, never stored on servers.
-                  </SheetDescription>
-                </SheetHeader>
-                <div className="scrollbar-slim max-h-[calc(100vh-10rem)] space-y-3 overflow-y-auto px-4 pb-6">
-                  {emails.length === 0 && (
-                    <p className="py-8 text-center text-xs text-muted-foreground">
-                      No emails scanned yet — run a Gmail sync first.
-                    </p>
-                  )}
-                  {emails.map((e) => (
-                    <div key={e.id} className="rounded-xl border border-border/70 bg-muted/50 p-3">
-                      <p className="text-xs font-semibold leading-snug text-foreground">{e.subject}</p>
-                      <p className="mt-1 truncate text-xs text-muted-foreground">{e.from}</p>
-                      <p suppressHydrationWarning className="text-xs text-muted-foreground/70">
-                        {formatDue(e.date)}
-                      </p>
-                      <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-muted-foreground">
-                        {e.snippet}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </SheetContent>
-            </Sheet>
-
-            <Dialog open={moodleOpen} onOpenChange={setMoodleOpen}>
-              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setMoodleOpen(true)}>
-                {moodleConnected ? (
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-                ) : (
-                  <CalendarDays className="h-3.5 w-3.5" />
-                )}
-                {moodleConnected ? "Moodle connected" : "Connect Moodle .ics"}
-              </Button>
-              <DialogContent className="border-border bg-card sm:max-w-md">
-                <DialogHeader>
-                  <DialogTitle>Connect Moodle calendar</DialogTitle>
-                  <DialogDescription>
-                    On elearning.unideb.hu go to Calendar → Export → Private address (.ics) and paste the
-                    URL here. It is stored only in this browser.
-                  </DialogDescription>
-                </DialogHeader>
-                <Input
-                  value={moodleUrl}
-                  onChange={(e) => setMoodleUrl(e.target.value)}
-                  placeholder="https://elearning.unideb.hu/calendar/export.php?..."
-                  className="border-input bg-background text-sm"
-                  aria-label="Moodle .ics calendar URL"
-                />
-                <DialogFooter>
-                  <Button
-                    onClick={() => void connectMoodle(moodleUrl)}
-                    disabled={moodleConnecting || !moodleUrl.trim()}
-                    className="gap-2 font-semibold"
-                  >
-                    {moodleConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
-                    Connect
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          </div>
-        </div>
-
-        {/* ── Conflict radar ───────────────────────────────────────────────── */}
-        {conflicts.length > 0 && (
-          <div className="mt-5 space-y-2" role="alert" aria-label="Deadline conflicts">
-            {conflicts.map((c) => (
-              <div
-                key={c.dateKey}
-                className="flex items-start gap-3 rounded-2xl border border-amber-400/30 bg-amber-400/[0.08] px-4 py-3 shadow-soft"
-              >
-                <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-amber-400 live-dot-amber" />
-                <div className="text-sm leading-relaxed">
-                  <span className="font-semibold text-amber-300">
-                    {c.tasks.length} deadlines collide on {c.dateLabel}.
-                  </span>{" "}
-                  <span className="text-muted-foreground">{c.tasks.map((t) => t.title).join(" · ")}</span>
-                </div>
-              </div>
-            ))}
+            <div>
+              <p className="caption-3 inline-flex items-center gap-2 text-status-high">
+                <WarningCircle className="h-4 w-4" aria-hidden="true" />
+                Gmail sync failed.
+              </p>
+              <p className="body-6 mt-1 text-status-high">Reconnect Google to continue.</p>
+            </div>
+            <a href="/api/auth/google" className={BUTTON_SECONDARY}>
+              Reconnect Google
+            </a>
           </div>
         )}
 
-        {/* ── Category filter chips ────────────────────────────────────────── */}
-        <div className="mt-5 flex flex-wrap gap-2" role="group" aria-label="Filter tasks by category">
-          {(["All", ...TASK_CATEGORIES] as const).map((c) => (
-            <button
-              key={c}
-              type="button"
-              onClick={() => setFilter(c)}
-              aria-pressed={filter === c}
-              className={cn(
-                "min-h-11 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-all duration-300 ease-base",
-                filter === c
-                  ? "border-transparent bg-primary text-primary-foreground shadow-btn-accent"
-                  : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground",
-              )}
-            >
-              {c}
-              <span className={cn("ml-1.5", filter === c ? "text-primary-foreground/70" : "text-muted-foreground/60")}>
-                {categoryCounts.get(c) ?? 0}
-              </span>
-            </button>
+        {/* ── Greeting ─────────────────────────────────────────────────────── */}
+        <header>
+          <h1 suppressHydrationWarning className="heading-5 text-black">
+            {greetingOf(new Date())}, {firstName}
+          </h1>
+          <p suppressHydrationWarning className="body-3 mt-1 text-[#666666]">
+            You have {weekTotal} task{weekTotal === 1 ? "" : "s"} due this week and {conflictMap.size} conflict
+            {conflictMap.size === 1 ? "" : "s"}.
+          </p>
+        </header>
+
+        {/* ── Summary tiles ────────────────────────────────────────────────── */}
+        <div className="mt-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {[
+            { label: "Due today", value: dueTodayCount, icon: null, iconClass: "" },
+            { label: "Next 7 days", value: next7Count, icon: null, iconClass: "" },
+            { label: "Conflicts", value: conflictMap.size, icon: WarningCircle, iconClass: "text-status-warn" },
+            { label: "Done this week", value: doneThisWeek, icon: CheckCircle, iconClass: "text-cat-medical" },
+          ].map((tile) => (
+            <div key={tile.label} className="rounded-2xl border border-border bg-white p-4">
+              <p className="caption-1 inline-flex items-center gap-1.5 text-[#666666]">
+                {tile.icon && <tile.icon className={cn("h-4 w-4", tile.iconClass)} aria-hidden="true" />}
+                {tile.label}
+              </p>
+              <p suppressHydrationWarning className="heading-4 mt-2 text-black">
+                {tile.value}
+              </p>
+            </div>
           ))}
         </div>
 
-        {/* ── Section 2 · Upcoming Schedule + sidebar ──────────────────────── */}
-        <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
-          <section aria-label="Upcoming schedule">
-            {showSkeletons ? (
-              <div className="space-y-3">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <Skeleton key={i} className="h-[72px] rounded-2xl bg-card" />
-                ))}
+        {/* ── Main column + right rail ─────────────────────────────────────── */}
+        <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="space-y-6 lg:col-span-2">
+            {/* ── Segmented filter ─────────────────────────────────────────── */}
+            <div role="group" aria-label="Filter tasks by category" className="-mx-4 overflow-x-auto px-4 scrollbar-slim sm:mx-0 sm:px-0">
+              <div className="relative flex w-max gap-1 rounded-lg bg-inset p-1 sm:w-full">
+                <span
+                  aria-hidden="true"
+                  className="absolute bottom-1 top-1 left-0 rounded-md border border-border bg-white transition-transform duration-500 ease-base"
+                  style={{ width: indicator.width, transform: `translateX(${indicator.left}px)` }}
+                />
+                {FILTERS.map((c, i) => {
+                  const selected = filter === c;
+                  return (
+                    <button
+                      key={c}
+                      ref={(el) => {
+                        segRefs.current[i] = el;
+                      }}
+                      type="button"
+                      onClick={() => setFilter(c)}
+                      aria-pressed={selected}
+                      className={cn(
+                        "relative z-10 flex min-h-9 items-center gap-1.5 whitespace-nowrap rounded-md px-3 button-sm transition-colors duration-300 ease-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black sm:flex-1 sm:justify-center",
+                        selected ? "text-black" : "text-[#666666] hover:text-black",
+                      )}
+                    >
+                      {c}
+                      <span className={cn("caption-4", selected ? "text-[#666666]" : "text-[#999999]")}>
+                        {categoryCounts.get(c) ?? 0}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
-            ) : visibleTasks.length === 0 ? (
-              <Card className="rounded-2xl border-dashed border-border bg-card/70 shadow-soft">
-                <CardContent className="flex flex-col items-center gap-3 py-14 text-center">
-                  <Inbox className="h-8 w-8 text-muted-foreground/60" />
-                  <p className="text-sm font-semibold text-foreground">
-                    {connected || isDemo ? "No deadlines detected yet" : "Gmail not connected"}
+            </div>
+
+            {/* ── Date groups ──────────────────────────────────────────────── */}
+            <section aria-label="Tasks by date">
+              {showSkeletons ? (
+                <div className="space-y-4">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <TaskCardSkeleton key={i} />
+                  ))}
+                </div>
+              ) : dateGroups.length === 0 ? (
+                <div className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-white px-4 py-12 text-center">
+                  <span
+                    aria-hidden="true"
+                    className="flex h-12 w-12 items-center justify-center rounded-full bg-alt text-[#666666]"
+                  >
+                    <CheckCircle className="h-6 w-6" />
+                  </span>
+                  <h2 className="heading-5 text-black">Nothing due this week</h2>
+                  <p className="body-3 max-w-sm text-[#666666]">
+                    New deadlines appear here as soon as they land in your inbox or Moodle.
                   </p>
-                  <p className="max-w-sm text-xs leading-relaxed text-muted-foreground">
-                    {connected || isDemo
-                      ? "Hit “Sync Gmail Now” — SyncMe scans your last 30 days of university email and pulls out exams, quizzes, appointments and immigration letters. Expired, personal and junk mail is excluded automatically. Tasks stay on this dashboard between syncs."
-                      : "Reconnect your Google account to start scanning your inbox for deadlines again. No consent screen needed."}
-                  </p>
-                  {!connected && !isDemo && (
-                    <Button asChild className="mt-1 gap-2 font-semibold">
-                      <a href="/api/auth/google">Reconnect Gmail</a>
-                    </Button>
+                  {!moodleConnected && (
+                    <button type="button" onClick={focusMoodleInput} className={cn(BUTTON_SECONDARY, "mt-2")}>
+                      Add your Moodle calendar
+                    </button>
                   )}
-                </CardContent>
-              </Card>
-            ) : (
-              <div>
-                <div className="mb-4 flex items-center gap-2 border-b border-border/60 pb-2.5">
-                  <CalendarDays className="h-4 w-4 text-primary" aria-hidden="true" />
-                  <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
-                    Upcoming Schedule
-                  </h2>
-                  <span className="hidden text-xs text-muted-foreground/60 sm:inline">— earliest first</span>
-                  <span className="ml-auto rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-semibold text-muted-foreground">
-                    {totalUpcoming}
-                  </span>
                 </div>
+              ) : (
+                <div className="space-y-8">
+                  {dateGroups.map((group) => (
+                    <div key={group.key}>
+                      <div className="sticky top-20 z-20 -mx-4 flex items-center gap-2 bg-white/95 px-4 py-2 backdrop-blur-sm sm:-mx-6 sm:px-6">
+                        <h3 className="title-4 text-black">{group.label}</h3>
+                        <span className="caption-4 rounded-full bg-inset px-2 py-0.5 text-[#666666]">
+                          {group.items.length}
+                        </span>
+                      </div>
+                      <ul className="mt-3 space-y-2">{renderGroupItems(group.items)}</ul>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
 
-                {upcomingDays.length === 0 ? (
-                  <p className="py-6 text-xs leading-relaxed text-muted-foreground">
-                    Nothing scheduled after today — everything due is already in Today&apos;s Focus above.
+          {/* ── Right rail ─────────────────────────────────────────────────── */}
+          <aside aria-label="Sync status and Moodle calendar" className="space-y-4 lg:sticky lg:top-24 lg:self-start">
+            {/* Moodle calendar card */}
+            <div className="rounded-2xl border border-border bg-white p-6">
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="title-2 text-black">Moodle calendar</h2>
+                <span
+                  className={cn(
+                    "caption-1 inline-flex items-center gap-1.5",
+                    moodleConnected ? "text-cat-medical" : "text-[#666666]",
+                  )}
+                >
+                  {moodleConnected && <CheckCircle className="h-4 w-4" aria-hidden="true" />}
+                  {moodleConnected ? "Connected" : "Not connected"}
+                </span>
+              </div>
+              <p className="body-6 mt-2 text-[#666666]">
+                Paste your private elearning.unideb.hu calendar feed once. It stays in your own browser.
+              </p>
+              <div className="mt-4 space-y-2">
+                <Input
+                  ref={moodleInputRef}
+                  id="moodle-ics-input"
+                  value={moodleUrl}
+                  onChange={(e) => {
+                    setMoodleUrl(e.target.value);
+                    setMoodleError(null);
+                    setMoodleSuccess(null);
+                  }}
+                  placeholder="https://elearning.unideb.hu/calendar/export.php?..."
+                  aria-label="Moodle .ics calendar URL"
+                  className="rounded-lg border-border bg-inset px-3 py-2 caption-1 text-black placeholder:text-[#666666] focus-visible:ring-black"
+                />
+                {moodleError && (
+                  <p role="alert" className="caption-1 text-status-high">
+                    {moodleError}
                   </p>
-                ) : (
-                  <div className="space-y-7">
-                    {upcomingDays.map((group) => {
-                      const label = group.key === "undated" ? "No date yet — check soon" : dayLabel(group.key, todayKey);
-                      return (
-                        <div
-                          key={group.key}
-                          aria-label={`${label} — ${group.items.length} task${group.items.length === 1 ? "" : "s"}`}
-                        >
-                          <div className="mb-2.5 flex items-center gap-2">
-                            <h3 className="text-sm font-semibold text-foreground">{label}</h3>
-                            <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
-                              {group.items.length}
-                            </span>
-                            <span className="h-px flex-1 bg-border/60" aria-hidden="true" />
-                          </div>
-                          <ul className="space-y-2.5">
-                            {group.items.map((t, i) => (
-                              <TaskRow key={t.id} task={t} index={i} onDone={markTaskDone} />
-                            ))}
-                          </ul>
-                        </div>
-                      );
-                    })}
-                  </div>
+                )}
+                {moodleSuccess && <p className="caption-1 text-cat-medical">{moodleSuccess}</p>}
+                <button
+                  type="button"
+                  onClick={() => void connectMoodle(moodleUrl)}
+                  disabled={moodleConnecting || !moodleUrl.trim()}
+                  className={cn(BUTTON_PRIMARY, "w-full")}
+                >
+                  <ArrowsClockwise className={cn("h-4 w-4", moodleConnecting && "animate-spin")} aria-hidden="true" />
+                  Save feed
+                </button>
+              </div>
+            </div>
+
+            {/* Conflict summary card */}
+            <div className="rounded-2xl border border-border bg-white p-6">
+              <h2 className="title-2 text-black">Conflict radar</h2>
+              {nextConflict ? (
+                <div className="mt-3 rounded-lg border border-status-warn-border bg-status-warn-bg p-4">
+                  <p className="caption-3 inline-flex items-center gap-2 text-status-warn">
+                    <WarningCircle className="h-4 w-4" aria-hidden="true" />
+                    Schedule conflict
+                  </p>
+                  <p className="caption-1 mt-1 text-[#666666]">
+                    {nextConflict[1].length} deadlines on {format(new Date(`${nextConflict[0]}T12:00:00`), "EEEE d MMM")}
+                  </p>
+                  <ul className="mt-2 space-y-1">
+                    {nextConflict[1].map((t) => (
+                      <li key={t.id} className="caption-4 truncate text-[#666666]">
+                        {t.title}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <p className="body-6 mt-2 text-[#666666]">No conflicts in your schedule right now.</p>
+              )}
+            </div>
+
+            {/* Sync status card */}
+            <div className="rounded-2xl border border-border bg-white p-6">
+              <h2 className="title-2 text-black">Sync status</h2>
+              <dl className="mt-3 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <dt className="caption-1 text-[#666666]">Gmail</dt>
+                  <dd
+                    className={cn(
+                      "caption-1 inline-flex items-center gap-1.5",
+                      connected || isDemo ? "text-cat-medical" : "text-status-high",
+                    )}
+                  >
+                    {(connected || isDemo) && <CheckCircle className="h-3.5 w-3.5" aria-hidden="true" />}
+                    {isDemo ? "Simulated" : connected ? "Connected" : "Disconnected"}
+                  </dd>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <dt className="caption-1 text-[#666666]">Moodle</dt>
+                  <dd className="caption-1 text-black">{moodleConnected ? `${moodleTasks.length} events` : "Not connected"}</dd>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <dt className="caption-1 text-[#666666]">Extractor</dt>
+                  <dd className="caption-1 text-black">
+                    {isDemo ? "Demo data" : engine === "gemini" ? "Gemini" : engine === "zai" ? "GLM" : engine === "rule" ? "Rule engine" : "—"}
+                  </dd>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <dt className="caption-1 text-[#666666]">Last sync</dt>
+                  <dd suppressHydrationWarning className="caption-1 font-mono text-black">
+                    {lastSync ? format(lastSync, "HH:mm:ss") : "—"}
+                  </dd>
+                </div>
+              </dl>
+              <div className="mt-4 space-y-2">
+                <button
+                  type="button"
+                  onClick={() => void syncNow()}
+                  disabled={syncing || (!isDemo && !connected)}
+                  className={cn(BUTTON_PRIMARY, "w-full")}
+                >
+                  <ArrowsClockwise className={cn("h-4 w-4", syncing && "animate-spin")} aria-hidden="true" />
+                  Sync now
+                </button>
+                {!isDemo && !connected && (
+                  <a href="/api/auth/google" className={cn(BUTTON_SECONDARY, "w-full")}>
+                    Reconnect Google
+                  </a>
                 )}
               </div>
-            )}
-          </section>
+            </div>
 
-          <aside className="space-y-4" aria-label="Sync status">
-            <Card className="rounded-2xl border-border/70 bg-card shadow-soft">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Sync status</CardTitle>
-                <CardDescription className="text-xs">Auto-refreshes every 30 seconds.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2.5 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Gmail</span>
-                  <span
-                    className={cn(
-                      "inline-flex items-center gap-1.5 font-medium",
-                      connected || isDemo ? "text-emerald-400" : "text-rose-400",
-                    )}
-                  >
-                    {(connected || isDemo) && <CheckCircle2 className="h-3.5 w-3.5" />}
-                    {isDemo ? "Simulated" : connected ? "Connected" : "Disconnected"}
-                  </span>
-                </div>
-                {!isDemo && (
-                  <p className="truncate text-xs text-muted-foreground/70" title={user.email}>
-                    {user.email}
-                  </p>
-                )}
-                {!isDemo && !connected && (
-                  <Button asChild size="sm" className="w-full gap-1.5 font-semibold">
-                    <a href="/api/auth/google">Reconnect Gmail</a>
-                  </Button>
-                )}
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Moodle</span>
-                  <span
-                    className={cn(
-                      "inline-flex items-center gap-1.5 font-medium",
-                      moodleConnected ? "text-emerald-400" : "text-muted-foreground",
-                    )}
-                  >
-                    {moodleConnected && <CheckCircle2 className="h-3.5 w-3.5" />}
-                    {moodleConnected ? `Connected · ${moodleTasks.length} events` : "Not connected"}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Extractor</span>
-                  <span className="font-medium text-foreground">
-                    {isDemo
-                      ? "Demo data"
-                      : engine === "gemini"
-                        ? "Gemini"
-                        : engine === "zai"
-                          ? "GLM"
-                          : engine === "rule"
-                            ? "Rule engine"
-                            : "—"}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Last sync</span>
-                  <span suppressHydrationWarning className="font-medium text-foreground">
-                    {lastSync ? format(lastSync, "HH:mm:ss") : "—"}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="rounded-2xl border-border/70 bg-card shadow-soft">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Moodle feed</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-xs">
-                <p className="break-all text-muted-foreground">
-                  {moodleConnected
-                    ? "Connected via your private .ics URL (stored in this browser only)."
-                    : "Paste your elearning.unideb.hu private .ics export URL to pull quiz and assignment deadlines."}
-                </p>
-                <Button variant="outline" size="sm" className="w-full gap-1.5" onClick={() => setMoodleOpen(true)}>
-                  <CalendarDays className="h-3.5 w-3.5" />
-                  {moodleConnected ? "Update feed URL" : "Connect .ics feed"}
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card className="rounded-2xl border-border/70 bg-card shadow-soft">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-sm">
-                  <ShieldCheck className="h-4 w-4 text-primary" />
-                  Read-only &amp; zero storage
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="text-xs leading-relaxed text-muted-foreground">
-                SyncMe uses <code className="text-foreground">gmail.readonly</code> solely to extract student
-                deadlines. Emails are fetched on demand and never stored or sold.{" "}
-                <a href="/privacy" className="text-primary underline underline-offset-4">
-                  Privacy Policy
+            {/* Privacy note */}
+            <div className="rounded-2xl border border-border bg-white p-6">
+              <h2 className="title-2 inline-flex items-center gap-2 text-black">
+                <ShieldCheck className="h-4 w-4 text-cat-medical" aria-hidden="true" />
+                Read only, zero storage
+              </h2>
+              <p className="body-6 mt-2 text-[#666666]">
+                SyncMe uses gmail.readonly solely to extract student deadlines. Emails are fetched on demand and
+                never stored or sold.{" "}
+                <a
+                  href="/privacy"
+                  className="underline underline-offset-4 transition-colors duration-300 ease-base hover:text-black"
+                >
+                  Privacy policy
                 </a>
-              </CardContent>
-            </Card>
+              </p>
+            </div>
           </aside>
         </div>
       </main>
+
+      {/* ── Source drawer (per task) ─────────────────────────────────────────── */}
+      <Sheet open={drawerTask !== null} onOpenChange={(open) => !open && setDrawerTask(null)}>
+        <SheetContent
+          side={isMobile ? "bottom" : "right"}
+          className={cn(
+            "w-full gap-0 overflow-y-auto border-border bg-white p-6 shadow-sm scrollbar-slim sm:max-w-[480px]",
+            isMobile && "max-h-[85dvh] rounded-t-2xl",
+          )}
+        >
+          {drawerTask && (
+            <>
+              <SheetHeader className="p-0 text-left">
+                <SheetTitle className="heading-5 text-black">{drawerTask.title}</SheetTitle>
+                <SheetDescription className="caption-1 mt-1 text-[#666666]">
+                  {drawerEmail ? `${drawerEmail.from} · ${formatTaskDue(drawerEmail.date)}` : drawerTask.sourceEmailSubject}
+                </SheetDescription>
+              </SheetHeader>
+              <div className="mt-6 rounded-lg bg-inset p-4">
+                <p className="caption-4 text-[#666666]">Due date</p>
+                <p className="caption-1 mt-0.5 font-mono text-black">{formatTaskDue(drawerTask.dueDate)}</p>
+                <p className="caption-4 mt-3 text-[#666666]">Priority</p>
+                <p className="mt-0.5">
+                  <span className={cn("caption-3 inline-flex items-center gap-1 rounded-full px-2 py-1", drawerTask.priority === "High" ? "bg-status-high-bg text-status-high" : drawerTask.priority === "Medium" ? "bg-status-warn-bg text-status-warn" : "bg-status-low-bg text-status-low")}>
+                    {drawerTask.priority}
+                  </span>
+                </p>
+                <p className="caption-4 mt-3 text-[#666666]">Action summary</p>
+                <p className="body-6 mt-0.5 text-black">{drawerTask.actionSummary}</p>
+              </div>
+              <div className="mt-4 rounded-lg bg-alt p-4">
+                <p className="caption-4 text-[#666666]">Source email</p>
+                <pre className="scrollbar-slim caption-1 mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap font-mono text-[#666666]">
+                  {drawerEmail ? drawerEmail.snippet : drawerTask.sourceEmailSubject}
+                </pre>
+              </div>
+              <div className="mt-6 flex flex-col gap-2 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const task = drawerTask;
+                    setDrawerTask(null);
+                    startComplete(task);
+                  }}
+                  className={cn(BUTTON_PRIMARY, "flex-1")}
+                >
+                  Mark done
+                </button>
+                <button type="button" onClick={() => setDrawerTask(null)} className={cn(BUTTON_SECONDARY, "flex-1")}>
+                  Close
+                </button>
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {/* ── Raw emails drawer ───────────────────────────────────────────────── */}
+      <Sheet open={emailsOpen} onOpenChange={setEmailsOpen}>
+        <SheetContent
+          side={isMobile ? "bottom" : "right"}
+          className={cn(
+            "w-full gap-0 overflow-y-auto border-border bg-white p-6 shadow-sm scrollbar-slim sm:max-w-[480px]",
+            isMobile && "max-h-[85dvh] rounded-t-2xl",
+          )}
+        >
+          <SheetHeader className="p-0 text-left">
+            <SheetTitle className="heading-5 text-black">Raw emails</SheetTitle>
+            <SheetDescription className="caption-1 mt-1 text-[#666666]">
+              Last 30 days, academic, educational, immigration, health and professional mail only. Fetched live,
+              never stored on servers.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="scrollbar-slim mt-6 space-y-3 overflow-y-auto pb-6">
+            {emails.length === 0 && (
+              <p className="caption-1 py-8 text-center text-[#666666]">
+                No emails scanned yet — run a Gmail sync first.
+              </p>
+            )}
+            {emails.map((e) => (
+              <div key={e.id} className="rounded-lg border border-border bg-white p-3">
+                <p className="body-6 font-medium text-black">{e.subject}</p>
+                <p className="caption-4 mt-1 truncate text-[#666666]">{e.from}</p>
+                <p suppressHydrationWarning className="caption-4 font-mono text-[#666666]">
+                  {formatTaskDue(e.date)}
+                </p>
+                <p className="caption-5 mt-2 line-clamp-3 text-[#666666]">{e.snippet}</p>
+              </div>
+            ))}
+          </div>
+        </SheetContent>
+      </Sheet>
 
       <SiteFooter />
     </div>

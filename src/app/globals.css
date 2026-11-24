@@ -44,80 +44,93 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* ─── SyncMe — dark editorial palette ──────────────────────────────────────
-   Ink #18191C · Card #232529 · Cloud #E4E5E7 · Signal Yellow #FFC93C
-   Minimalist, editorial, high contrast — the SyncMe signature look.         */
-:root {
-  --radius: 0.75rem;
-  --background: #18191c;
-  --foreground: #e4e5e7;
-  --card: #232529;
-  --card-foreground: #e4e5e7;
-  --popover: #232529;
-  --popover-foreground: #e4e5e7;
-  --primary: #ffc93c;
-  --primary-foreground: #18191c;
-  --secondary: #2a2c31;
-  --secondary-foreground: #e4e5e7;
-  --muted: #1e2024;
-  --muted-foreground: #9ba0a8;
-  --accent: #2a2c31;
-  --accent-foreground: #ffc93c;
-  --destructive: #ef5350;
-  --destructive-foreground: #ffffff;
-  --border: #2e3136;
-  --input: #34373d;
-  --ring: #ffc93c;
-  --chart-1: #ffc93c;
-  --chart-2: #34a97b;
-  --chart-3: #e5a13c;
-  --chart-4: #ef5350;
-  --chart-5: #8a919b;
-  --sidebar: #232529;
-  --sidebar-foreground: #e4e5e7;
-  --sidebar-primary: #ffc93c;
-  --sidebar-primary-foreground: #18191c;
-  --sidebar-accent: #2a2c31;
-  --sidebar-accent-foreground: #ffc93c;
-  --sidebar-border: #2e3136;
-  --sidebar-ring: #ffc93c;
+/* ─── SyncMe light design tokens ─────────────────────────────────────────────
+   White page · #F5F5F5 alternate sections · #F0F0F0 inset surfaces ·
+   #E5E5E5 borders (#A3A3A3 on hover). Flat color only; the single allowed
+   gradient is the hero heading text (#000000 → #666666).                     */
+@theme {
+  /* Surfaces */
+  --color-alt: #f5f5f5;
+  --color-inset: #f0f0f0;
+  --color-border-strong: #a3a3a3;
+
+  /* Category tints (text on flat tinted background) */
+  --color-cat-neptun: #1d4ed8;
+  --color-cat-neptun-bg: #dbeafe;
+  --color-cat-moodle: #c2410c;
+  --color-cat-moodle-bg: #ffedd5;
+  --color-cat-medical: #047857;
+  --color-cat-medical-bg: #d1fae5;
+  --color-cat-immigration: #7e22ce;
+  --color-cat-immigration-bg: #f3e8ff;
+
+  /* Status tints (always paired with an icon and a text label) */
+  --color-status-high: #b91c1c;
+  --color-status-high-bg: #fee2e2;
+  --color-status-warn: #a16207;
+  --color-status-warn-bg: #fef3c7;
+  --color-status-warn-border: #eab308;
+  --color-status-low: #666666;
+  --color-status-low-bg: #f0f0f0;
 }
 
-/* Safety mirror: even if a .dark class is ever toggled, SyncMe stays in its
-   dark editorial skin — the palette is the brand. */
-.dark {
-  --background: #18191c;
-  --foreground: #e4e5e7;
-  --card: #232529;
-  --card-foreground: #e4e5e7;
-  --popover: #232529;
-  --popover-foreground: #e4e5e7;
-  --primary: #ffc93c;
-  --primary-foreground: #18191c;
-  --secondary: #2a2c31;
-  --secondary-foreground: #e4e5e7;
-  --muted: #1e2024;
-  --muted-foreground: #9ba0a8;
-  --accent: #2a2c31;
-  --accent-foreground: #ffc93c;
-  --destructive: #ef5350;
+:root {
+  --radius: 0.5rem;
+  --background: #ffffff;
+  --foreground: #000000;
+  --card: #ffffff;
+  --card-foreground: #000000;
+  --popover: #ffffff;
+  --popover-foreground: #000000;
+  --primary: #000000;
+  --primary-foreground: #ffffff;
+  --secondary: #f5f5f5;
+  --secondary-foreground: #000000;
+  --muted: #f5f5f5;
+  --muted-foreground: #666666;
+  --accent: #f0f0f0;
+  --accent-foreground: #000000;
+  --destructive: #b91c1c;
   --destructive-foreground: #ffffff;
-  --border: #2e3136;
-  --input: #34373d;
-  --ring: #ffc93c;
-  --chart-1: #ffc93c;
-  --chart-2: #34a97b;
-  --chart-3: #e5a13c;
-  --chart-4: #ef5350;
-  --chart-5: #8a919b;
-  --sidebar: #232529;
-  --sidebar-foreground: #e4e5e7;
-  --sidebar-primary: #ffc93c;
-  --sidebar-primary-foreground: #18191c;
-  --sidebar-accent: #2a2c31;
-  --sidebar-accent-foreground: #ffc93c;
-  --sidebar-border: #2e3136;
-  --sidebar-ring: #ffc93c;
+  --border: #e5e5e5;
+  --input: #e5e5e5;
+  --ring: #000000;
+  --chart-1: #000000;
+  --chart-2: #666666;
+  --chart-3: #a3a3a3;
+  --chart-4: #d4d4d4;
+  --chart-5: #e5e5e5;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #000000;
+  --sidebar-primary: #000000;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f0f0f0;
+  --sidebar-accent-foreground: #000000;
+  --sidebar-border: #e5e5e5;
+  --sidebar-ring: #000000;
+}
+
+/* SyncMe ships light only: no dark mode, no theme toggle, no dark styles. */
+.dark {
+  --background: #ffffff;
+  --foreground: #000000;
+  --card: #ffffff;
+  --card-foreground: #000000;
+  --popover: #ffffff;
+  --popover-foreground: #000000;
+  --primary: #000000;
+  --primary-foreground: #ffffff;
+  --secondary: #f5f5f5;
+  --secondary-foreground: #000000;
+  --muted: #f5f5f5;
+  --muted-foreground: #666666;
+  --accent: #f0f0f0;
+  --accent-foreground: #000000;
+  --destructive: #b91c1c;
+  --destructive-foreground: #ffffff;
+  --border: #e5e5e5;
+  --input: #e5e5e5;
+  --ring: #000000;
 }
 
 @layer base {
@@ -125,49 +138,157 @@
     @apply border-border outline-ring/50;
   }
   html {
-    color-scheme: dark;
+    color-scheme: light;
+    scroll-behavior: smooth;
   }
   body {
     @apply bg-background text-foreground;
   }
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+  }
 }
 
-/* ─── Editorial glow backdrop — faint signal-yellow / teal light pools ──────
-   A fixed, pointer-transparent layer behind every page. Static and subtle —
-   no noise, no animation, pure ambience on the ink canvas.                  */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background:
-    radial-gradient(56rem 34rem at 10% -10%, rgba(255, 201, 60, 0.06), transparent 62%),
-    radial-gradient(48rem 30rem at 92% -6%, rgba(94, 145, 186, 0.07), transparent 60%),
-    radial-gradient(52rem 36rem at 46% 112%, rgba(52, 169, 123, 0.05), transparent 62%);
+/* ─── Named text styles ──────────────────────────────────────────────────────
+   Every text element uses exactly one of these. No arbitrary font sizes.
+   heading-1/2 fall back to heading-3/4 sizes on mobile by design.
+   Headings balance their lines; body copy wraps pretty.                      */
+@layer components {
+  .heading-1 {
+    @apply text-4xl leading-10 font-semibold tracking-tight sm:text-6xl sm:leading-none;
+    text-wrap: balance;
+  }
+  .heading-2 {
+    @apply text-3xl leading-9 font-semibold tracking-tight sm:text-5xl sm:leading-none;
+    text-wrap: balance;
+  }
+  .heading-3 {
+    @apply text-4xl leading-10 font-semibold tracking-tight;
+    text-wrap: balance;
+  }
+  .heading-4 {
+    @apply text-3xl leading-9 font-semibold tracking-tight;
+    text-wrap: balance;
+  }
+  .heading-5 {
+    @apply text-2xl leading-8 font-semibold tracking-tight;
+    text-wrap: balance;
+  }
+  .heading-6 {
+    @apply text-xl leading-7 font-semibold tracking-tight;
+    text-wrap: balance;
+  }
+  .title-1 {
+    @apply text-xl leading-7 font-medium;
+  }
+  .title-2 {
+    @apply text-lg leading-7 font-medium;
+  }
+  .title-3 {
+    @apply text-base leading-6 font-medium;
+  }
+  .title-4 {
+    @apply text-sm leading-5 font-medium;
+  }
+  .body-3 {
+    @apply text-base leading-6;
+    text-wrap: pretty;
+  }
+  .body-6 {
+    @apply text-sm leading-5;
+    text-wrap: pretty;
+  }
+  .button-md {
+    @apply text-base leading-6 font-semibold;
+  }
+  .button-sm {
+    @apply text-sm leading-5 font-semibold;
+  }
+  .caption-1 {
+    @apply text-sm leading-5 font-medium;
+  }
+  .caption-3 {
+    @apply text-xs leading-4 font-semibold;
+  }
+  .caption-4 {
+    @apply text-xs leading-4 font-medium;
+  }
+  .caption-5 {
+    @apply text-xs leading-4;
+  }
 }
 
-/* ─── Soft elevation utilities (Tailwind v4 custom shadows) ─────────────── */
-@utility shadow-soft {
-  box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.28),
-    0 16px 40px -24px rgba(0, 0, 0, 0.55);
+/* ─── Motion ─────────────────────────────────────────────────────────────────
+   Base curve for everything: cubic-bezier(0.22, 1, 0.36, 1). Position and
+   layout feel: 500ms. Color and opacity shifts: 300ms. Nothing below 200ms.
+   Only transform and opacity are ever animated.                              */
+@utility ease-base {
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-@utility shadow-lift {
-  box-shadow:
-    0 2px 4px rgba(0, 0, 0, 0.3),
-    0 24px 48px -20px rgba(0, 0, 0, 0.6);
+/* Cards and panels: 500ms movement, 300ms color, on the base curve. */
+.card-hover {
+  transition:
+    transform 500ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 300ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.card-hover:hover {
+  transform: translateY(-2px);
+}
+.card-hover:active {
+  transform: scale(0.98);
 }
 
-@utility shadow-btn-accent {
-  box-shadow: 0 8px 24px -8px rgba(255, 201, 60, 0.4);
+/* Tagline reveal (mandatory section): words rest at 30% black, activate to
+   full black one by one as they cross the trigger line. */
+.word-reveal {
+  opacity: 0.3;
+  transition: opacity 500ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.word-reveal[data-active="true"] {
+  opacity: 1;
 }
 
-/* ─── Slim scrollbar tuned for the dark editorial theme ──────────────────── */
+/* Skeleton loaders: shaped like real cards, slow opacity pulse (opacity only). */
+.skeleton-soft {
+  animation: skeleton-pulse 2.4s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* ─── Reduced motion: replace all movement with a plain opacity change ─────── */
+@media (prefers-reduced-motion: reduce) {
+  .card-hover,
+  .card-hover:hover,
+  .card-hover:active {
+    transform: none;
+    transition-property: opacity, border-color, background-color;
+  }
+  .word-reveal {
+    opacity: 1;
+    transition: none;
+  }
+  .skeleton-soft {
+    animation: none;
+    opacity: 0.7;
+  }
+}
+
+/* ─── Slim scrollbar tuned for the light theme ────────────────────────────── */
 .scrollbar-slim {
   scrollbar-width: thin;
-  scrollbar-color: #3a3d45 transparent;
+  scrollbar-color: #d4d4d4 transparent;
 }
 .scrollbar-slim::-webkit-scrollbar {
   width: 6px;
@@ -177,57 +298,9 @@ body::before {
   background: transparent;
 }
 .scrollbar-slim::-webkit-scrollbar-thumb {
-  background: #3a3d45;
+  background: #d4d4d4;
   border-radius: 999px;
 }
 .scrollbar-slim::-webkit-scrollbar-thumb:hover {
-  background: #4a4e57;
-}
-
-/* ─── Live pulse dot for status pills (signal yellow) + amber variant ────── */
-@keyframes syncme-live {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(255, 201, 60, 0.45);
-  }
-  50% {
-    box-shadow: 0 0 0 5px rgba(255, 201, 60, 0);
-  }
-}
-.live-dot {
-  animation: syncme-live 1.8s cubic-bezier(0.22, 1, 0.36, 1) infinite;
-}
-
-@keyframes syncme-live-amber {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(229, 161, 60, 0.5);
-  }
-  50% {
-    box-shadow: 0 0 0 5px rgba(229, 161, 60, 0);
-  }
-}
-.live-dot-amber {
-  animation: syncme-live-amber 1.8s cubic-bezier(0.22, 1, 0.36, 1) infinite;
-}
-
-/* ─── Design-skill motion utilities ────────────────────────────────────────
-   Base curve: weighted deceleration, never a browser default ease.          */
-@utility ease-base {
-  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-/* ─── Tagline reveal (B11): words rest at ~30%, activate one by one ──────── */
-.word-reveal {
-  opacity: 0.3;
-  transition: opacity 500ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-.word-reveal[data-active="true"] {
-  opacity: 1;
-}
-@media (prefers-reduced-motion: reduce) {
-  .word-reveal {
-    opacity: 1;
-    transition: none;
-  }
+  background: #a3a3a3;
 }

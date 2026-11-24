@@ -10,9 +10,9 @@ const WORDS =
 /**
  * Mandatory tagline reveal (design skill B11): a large type moment, separate
  * from the hero. Words rest at ~30% opacity of the base text color and
- * activate to full color one at a time as they cross a trigger line. Driven
- * by IntersectionObserver per word; the base curve and reduced-motion
- * behavior live in the .word-reveal CSS (globals.css).
+ * activate to full color one at a time as they cross a trigger line, on the
+ * base curve. Driven by IntersectionObserver per word; the base curve and
+ * reduced-motion behavior live in the .word-reveal CSS (globals.css).
  */
 export function TaglineReveal() {
   const containerRef = useRef<HTMLParagraphElement>(null);
@@ -38,11 +38,8 @@ export function TaglineReveal() {
   }, []);
 
   return (
-    <section aria-label="SyncMe promise" className="border-t border-border/60 px-4 py-16 sm:px-6 sm:py-20">
-      <p
-        ref={containerRef}
-        className="mx-auto max-w-[680px] text-3xl font-semibold leading-snug tracking-tight sm:text-4xl"
-      >
+    <section aria-label="SyncMe promise" className="px-4 py-16 sm:px-6 sm:py-24">
+      <p ref={containerRef} className="heading-2 mx-auto max-w-[680px] text-black">
         {WORDS.map((word, i) => (
           <span key={`${word}-${i}`} data-word className="word-reveal">
             {word}

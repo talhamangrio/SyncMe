@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { FAQS } from "@/lib/faq-data";
 import { LandingClient } from "./landing-client";
 
 export const dynamic = "force-dynamic";
@@ -18,5 +19,21 @@ export default async function HomePage({
   const jar = await cookies();
   const signedIn = Boolean(jar.get("syncme_user")?.value);
 
-  return <LandingClient authError={authError} oauthError={error} oauthDetail={detail} signedIn={signedIn} />;
+  // FAQPage JSON-LD for answer engines (AEO): plain question and answer form.
+  const faqJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: FAQS.map((faq) => ({
+      "@type": "Question",
+      name: faq.q,
+      acceptedAnswer: { "@type": "Answer", text: faq.a },
+    })),
+  };
+
+  return (
+    <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
+      <LandingClient authError={authError} oauthError={error} oauthDetail={detail} signedIn={signedIn} />
+    </>
+  );
 }

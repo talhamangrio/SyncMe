@@ -137,12 +137,13 @@ You can unsubscribe at any time.`,
 export const DEMO_TASKS: SyncTask[] = [
   {
     id: "demo-task-quiz",
-    title: "Quiz 3 - Genetika closes",
+    title: "Quiz 3 closes (Genetika)",
     category: "Moodle",
     dueDate: toBudapestIso(quizDeadline),
     priority: "High",
-    actionSummary: "Finish Quiz 3 on elearning.unideb.hu before it closes - 30 min limit, 1 attempt.",
+    actionSummary: "Finish Quiz 3 on elearning.unideb.hu before it closes. 30 minute limit, 1 attempt.",
     sourceEmailSubject: `Moodle: Quiz 3 (Genetika) closes ${human(quizDeadline)}`,
+    source: "Moodle",
   },
   {
     id: "demo-task-docs",
@@ -152,15 +153,17 @@ export const DEMO_TASKS: SyncTask[] = [
     priority: "High",
     actionSummary: "Scan and upload passport, TAJ card and accommodation certificate to the Enter Hungary portal.",
     sourceEmailSubject: `Enter Hungary: Upload residence permit documents before ${human(docsDeadline)}`,
+    source: "Gmail",
   },
   {
     id: "demo-task-examreg",
-    title: "Exam registration closes - MBVB13003",
+    title: "Exam registration closes (MBVB13003)",
     category: "Neptun",
     dueDate: toBudapestIso(examRegClose),
     priority: "High",
     actionSummary: "Register (or deregister) for the Practical Biochemistry exam in Neptun before midnight.",
     sourceEmailSubject: "[Neptun] Exam registration closes soon - MBVB13003 Practical Biochemistry",
+    source: "Gmail",
   },
   {
     id: "demo-task-thesis",
@@ -170,24 +173,27 @@ export const DEMO_TASKS: SyncTask[] = [
     priority: "Medium",
     actionSummary: "Reply to Prof. Kovács's email approving the proposed thesis topic.",
     sourceEmailSubject: "Re: Thesis topic approval - please confirm by replying",
+    source: "Gmail",
   },
   {
     id: "demo-task-clinic",
-    title: "Cardiology follow-up appointment",
+    title: "Cardiology follow up appointment",
     category: "Medical",
     dueDate: toBudapestIso(clinicAppt),
     priority: "Medium",
-    actionSummary: "Attend the follow-up at Kenézy Campus Door 3; bring your TAJ card and referral letter.",
+    actionSummary: "Attend the follow up at Kenézy Campus Door 3; bring your TAJ card and referral letter.",
     sourceEmailSubject: "Appointment confirmation - Cardiology follow-up at the Klinika",
+    source: "Gmail",
   },
   {
     id: "demo-task-exam",
-    title: "Exam: Practical Biochemistry (ÉÉ-111)",
+    title: "Exam: Practical Biochemistry (room ÉÉ 111)",
     category: "Neptun",
     dueDate: toBudapestIso(examDate),
     priority: "Medium",
     actionSummary: "Sit the MBVB13003 written exam; arrive 15 minutes early with your student card.",
     sourceEmailSubject: "[Neptun] Exam registration closes soon - MBVB13003 Practical Biochemistry",
+    source: "Gmail",
   },
   {
     id: "demo-task-permit",
@@ -195,7 +201,14 @@ export const DEMO_TASKS: SyncTask[] = [
     category: "Immigration",
     dueDate: toBudapestIso(permitAppt),
     priority: "Medium",
-    actionSummary: "Attend the aliens-policing appointment in Debrecen with all original documents.",
+    actionSummary: "Attend the aliens policing appointment in Debrecen with all original documents.",
     sourceEmailSubject: `Enter Hungary: Upload residence permit documents before ${human(docsDeadline)}`,
+    source: "Gmail",
   },
+];
+
+/** Sample completed history for the "Done this week" summary tile in demo mode. */
+export const DEMO_DONE: { id: string; at: string }[] = [
+  { id: "demo-done-lab-report", at: new Date(Date.now() - 2 * 86_400_000).toISOString() },
+  { id: "demo-done-tuition", at: new Date(Date.now() - 5 * 86_400_000).toISOString() },
 ];

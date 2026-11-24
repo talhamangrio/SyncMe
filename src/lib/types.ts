@@ -3,6 +3,9 @@
 export type TaskCategory = "Neptun" | "Moodle" | "Medical" | "Immigration";
 export type TaskPriority = "High" | "Medium" | "Low";
 
+/** Which feed produced a task. Tagged when tasks are synced or seeded. */
+export type TaskSource = "Gmail" | "Moodle";
+
 /** Structured task extracted from an email or calendar feed. */
 export interface SyncTask {
   id: string;
@@ -13,6 +16,8 @@ export interface SyncTask {
   priority: TaskPriority;
   actionSummary: string;
   sourceEmailSubject: string;
+  /** Optional origin chip shown on the task card; inferred per sync source. */
+  source?: TaskSource;
 }
 
 /** Raw email metadata shown in the "Raw Emails" drawer (never persisted). */
@@ -49,26 +54,30 @@ export interface MoodleSyncResponse {
 
 export const TASK_CATEGORIES: TaskCategory[] = ["Neptun", "Moodle", "Medical", "Immigration"];
 
-/** Dark-editorial category styling: a tinted translucent chip behind the category icon. */
-export const CATEGORY_STYLES: Record<TaskCategory, { chip: string; dot: string }> = {
-  Neptun: { chip: "bg-sky-400/12 text-sky-300 ring-1 ring-inset ring-sky-400/25", dot: "bg-sky-400" },
-  Moodle: { chip: "bg-emerald-400/12 text-emerald-300 ring-1 ring-inset ring-emerald-400/25", dot: "bg-emerald-400" },
-  Medical: { chip: "bg-rose-400/12 text-rose-300 ring-1 ring-inset ring-rose-400/25", dot: "bg-rose-400" },
-  Immigration: { chip: "bg-amber-400/12 text-amber-300 ring-1 ring-inset ring-amber-400/25", dot: "bg-amber-400" },
+/** Light category styling: tinted chip text on a flat tinted background. */
+export const CATEGORY_UI: Record<TaskCategory, { chip: string; icon: string; circle: string }> = {
+  Neptun: { chip: "bg-cat-neptun-bg text-cat-neptun", icon: "text-cat-neptun", circle: "bg-cat-neptun-bg" },
+  Moodle: { chip: "bg-cat-moodle-bg text-cat-moodle", icon: "text-cat-moodle", circle: "bg-cat-moodle-bg" },
+  Medical: { chip: "bg-cat-medical-bg text-cat-medical", icon: "text-cat-medical", circle: "bg-cat-medical-bg" },
+  Immigration: {
+    chip: "bg-cat-immigration-bg text-cat-immigration",
+    icon: "text-cat-immigration",
+    circle: "bg-cat-immigration-bg",
+  },
 };
 
-/** Priority styling: quiet colored text + matching dot, tuned for the dark card surface. */
-export const PRIORITY_STYLES: Record<TaskPriority, string> = {
-  High: "text-rose-300",
-  Medium: "text-amber-300",
-  Low: "text-emerald-300",
+/** Status tint pills: always paired with an icon and a text label (never color alone). */
+export const PRIORITY_UI: Record<TaskPriority, { pill: string; label: string }> = {
+  High: { pill: "bg-status-high-bg text-status-high", label: "High" },
+  Medium: { pill: "bg-status-warn-bg text-status-warn", label: "Medium" },
+  Low: { pill: "bg-status-low-bg text-status-low", label: "Low" },
 };
 
-export const PRIORITY_DOTS: Record<TaskPriority, string> = {
-  High: "bg-rose-400",
-  Medium: "bg-amber-400",
-  Low: "bg-emerald-400",
-};
+/** Urgency pill (due within 24 hours, or overdue): the high priority tint. */
+export const URGENCY_PILL = "bg-status-high-bg text-status-high";
+
+/** Neutral source chip ("Gmail" or "Moodle"): inset surface, secondary text. */
+export const SOURCE_CHIP = "bg-inset text-[#666666]";
 
 /** Normalize/validate one raw task object coming from the AI or heuristics. */
 export function sanitizeTask(raw: unknown, fallbackId: string): SyncTask | null {

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Zap } from "lucide-react";
+import { Lightning } from "@phosphor-icons/react/dist/ssr";
 import { cn } from "@/lib/utils";
 
 /** SyncMe brand mark — clicking it always returns to the homepage. */
@@ -9,18 +9,15 @@ export function Logo({ className }: { className?: string }) {
       href="/"
       aria-label="SyncMe home"
       className={cn(
-        "inline-flex items-center gap-2 rounded-md transition-opacity duration-300 ease-base hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring",
+        "inline-flex items-center gap-2 rounded-lg transition-opacity duration-300 ease-base hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black",
         className,
       )}
     >
-      <span
-        aria-hidden="true"
-        className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-[#FFD34D] to-[#F0A81C] text-[#18191C] shadow-[0_4px_12px_-3px_rgba(255,201,60,0.55)]"
-      >
-        <Zap className="h-4 w-4" fill="currentColor" />
+      <span aria-hidden="true" className="flex h-7 w-7 items-center justify-center rounded-lg bg-black text-white">
+        <Lightning weight="fill" className="h-4 w-4" />
       </span>
-      <span className="text-base font-semibold tracking-tight text-foreground">
-        Sync<span className="text-primary">Me</span>
+      <span className="title-3 tracking-tight text-black">
+        Sync<span className="text-[#666666]">Me</span>
       </span>
     </Link>
   );

@@ -1,27 +1,23 @@
 import Link from "next/link";
 import { Logo } from "@/components/logo";
 
+/** Full width footer on the alternate surface, separated by a full width rule. */
 export function SiteFooter() {
+  const linkClass =
+    "caption-4 text-[#666666] underline-offset-4 transition-colors duration-300 ease-base hover:text-black hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black rounded-sm";
   return (
-    <footer className="mt-auto border-t border-border/70 bg-background pb-[env(safe-area-inset-bottom)]">
-      <div className="mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-3 px-4 py-6 text-xs text-muted-foreground sm:flex-row sm:px-6">
-        <div className="flex items-center gap-3">
+    <footer className="mt-auto w-full border-t border-border bg-alt pb-[env(safe-area-inset-bottom)]">
+      <div className="mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-4 px-4 py-8 sm:flex-row sm:px-6">
+        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
           <Logo />
-          <span aria-hidden="true" className="text-border">|</span>
-          <span>© {new Date().getFullYear()} SyncMe</span>
+          <span className="caption-4 text-[#666666]">Built for University of Debrecen students</span>
         </div>
-        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
-          <span>Built for University of Debrecen students</span>
-          <Link
-            href="/privacy"
-            className="underline-offset-4 transition-colors duration-300 ease-base hover:text-foreground hover:underline"
-          >
-            Privacy Policy
+        <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
+          <span className="caption-4 text-[#666666]">© 2026 SyncMe</span>
+          <Link href="/privacy" className={linkClass}>
+            Privacy policy
           </Link>
-          <Link
-            href="/terms"
-            className="underline-offset-4 transition-colors duration-300 ease-base hover:text-foreground hover:underline"
-          >
+          <Link href="/terms" className={linkClass}>
             Terms
           </Link>
         </div>
