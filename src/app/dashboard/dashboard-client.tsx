@@ -293,13 +293,10 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
     const savedEmails = loadJson<RawEmail[]>(EMAILS_KEY, []);
     const legacyDone = loadJson<string[]>(DONE_KEY, []);
     const savedDoneAt = loadJson<Record<string, string>>(DONE_AT_KEY, {});
+    const savedDoneTasks = loadJson<Record<string, DoneEntry>>(DONE_TASKS_KEY, {});
     const mergedDoneAt: Record<string, string> = { ...savedDoneAt };
     for (const id of legacyDone) if (!mergedDoneAt[id]) mergedDoneAt[id] = new Date().toISOString();
     const ids = new Set<string>([...legacyDone, ...Object.keys(savedDoneAt)]);
-    doneRef.current = ids;
-    setDoneIds(ids);
-    setDoneAt(mergedDoneAt);
-    const savedDoneTasks = loadJson<Record<string, DoneEntry>>(DONE_TASKS_KEY, {});
     // Keep only the last 30 days of completed snapshots — the Done list never piles up.
     const monthCutoff = Date.now() - 30 * 86_400_000;
     const liveDoneTasks: Record<string, DoneEntry> = {};
@@ -307,6 +304,37 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
       const at = mergedDoneAt[id];
       if (!at || Date.parse(at) > monthCutoff) liveDoneTasks[id] = entry;
     }
+    // Recovery pass: done ids whose snapshot went missing (completed in an
+    // older release that stored only ids) are re-hydrated from the persisted
+    // feed stores, so a completed task can still render in the Done view.
+    const orphanIds = [...ids].filter((id) => !liveDoneTasks[id]);
+    if (orphanIds.length > 0) {
+      const orphanSet = new Set(orphanIds);
+      const feedPool: SyncTask[] = [
+        ...savedTasks.map((t) => ({ ...t, source: "Gmail" as const })),
+        ...savedMoodle.map((t) => ({ ...t, source: "Moodle" as const })),
+      ];
+      for (const task of feedPool) {
+        if (!orphanSet.has(task.id) || liveDoneTasks[task.id]) continue;
+        liveDoneTasks[task.id] = { task, origin: task.source === "Moodle" ? "moodle" : "gmail" };
+      }
+    }
+    // Phantom pass: entries that remain snapshot-less are completed tasks
+    // whose row data is gone for good (pre-snapshot ids, ids the AI re-slugs
+    // on every sync). They can never render, so they must not inflate the
+    // "Done this week" tile — and keeping their ids would hide the task
+    // forever with no trace. They are pruned so anything still live returns
+    // to the schedule, where completing it again stores a durable snapshot.
+    const prunedIds = new Set<string>();
+    const prunedAt: Record<string, string> = {};
+    for (const id of Object.keys(mergedDoneAt)) {
+      if (!liveDoneTasks[id]) continue;
+      prunedIds.add(id);
+      prunedAt[id] = mergedDoneAt[id];
+    }
+    doneRef.current = prunedIds;
+    setDoneIds(prunedIds);
+    setDoneAt(prunedAt);
     doneTasksRef.current = liveDoneTasks;
     setDoneTasks(liveDoneTasks);
     setGmailTasks((prev) => (prev.length === 0 ? tagSource(savedTasks, "Gmail") : prev));
@@ -657,17 +685,23 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
       return day !== null && day > todayKey && day <= weekEndKey;
     }).length;
   }, [allTasks, todayKey]);
-  const doneThisWeek = useMemo(() => {
-    const cutoff = Date.now() - 7 * 86_400_000;
-    return Object.values(doneAt).filter((at) => Date.parse(at) > cutoff).length;
-  }, [doneAt]);
-
   /** Completed task snapshots, most recently done first — powers the Done view. */
   const doneEntries = useMemo(() => {
     return Object.values(doneTasks)
       .map((entry) => ({ ...entry, at: doneAt[entry.task.id] ?? "" }))
       .sort((a, b) => (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0));
   }, [doneTasks, doneAt]);
+
+  /**
+   * "Done this week" counts only renderable completed rows — the exact
+   * entries the Done view will list. Phantom bookkeeping (a done timestamp
+   * whose task snapshot no longer exists anywhere) can never inflate it, so
+   * the tile never shows a number the completed list cannot show.
+   */
+  const doneThisWeek = useMemo(() => {
+    const cutoff = Date.now() - 7 * 86_400_000;
+    return doneEntries.filter((e) => e.at && Date.parse(e.at) > cutoff).length;
+  }, [doneEntries]);
 
   const categoryCounts = useMemo(() => {
     const counts = new Map<string, number>();
