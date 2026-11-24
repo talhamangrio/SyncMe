@@ -54,7 +54,8 @@ export default function TermsPage() {
             <h2 className="text-base font-semibold text-foreground">Your data</h2>
             <p className="mt-2 text-muted-foreground">
               Emails are fetched on demand and never stored on our servers. Your session lives in cookies
-              on your device, and your Moodle feed URL stays in your own browser. Logging out removes
+              on your device, and your Moodle feed URL is saved only inside your own Google account (a hidden
+              app folder) and this browser. Logging out removes
               every SyncMe cookie immediately.
             </p>
           </section>

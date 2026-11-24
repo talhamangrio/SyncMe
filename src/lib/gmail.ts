@@ -1,11 +1,16 @@
-// ─── Google OAuth 2.0 + Gmail REST helpers (cookie-based, zero storage) ─────
+// ─── Google OAuth 2.0 + Gmail REST helpers (cookie-based, zero servers) ─────
 // SyncMe never persists Gmail data: tokens live in a short-lived httpOnly
 // cookie and emails are fetched on demand, processed transiently, discarded.
+// The ONLY thing SyncMe keeps is the student's Moodle calendar URL — stored
+// privately in the student's OWN Google Drive app-data folder (drive.appdata,
+// invisible in their Drive UI, follows the account to every device), which is
+// why that scope rides along with gmail.readonly.
 
 import type { NextRequest } from "next/server";
 import type { RawEmail } from "@/lib/types";
 
-export const GMAIL_SCOPES = "openid email profile https://www.googleapis.com/auth/gmail.readonly";
+export const GMAIL_SCOPES =
+  "openid email profile https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/drive.appdata";
 
 /**
  * Only student-relevant mail: academic, educational, immigration, health and

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { fetchIcsFeed } from "@/lib/ics";
 import { dropExpiredTasks, sortChronologically, toBudapestIso } from "@/lib/dates";
+import { collapseDuplicateTasks } from "@/lib/task-dedupe";
 import type { MoodleSyncResponse, SyncTask, TaskPriority } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -48,8 +49,10 @@ export async function POST(req: NextRequest) {
       });
 
     // Deterministic expiration guard: drop every event whose day is strictly
-    // earlier than today (Europe/Budapest), then sort earliest-first.
-    const tasks = sortChronologically(dropExpiredTasks(candidates, now)).slice(0, 25);
+    // earlier than today (Europe/Budapest), collapse duplicate events (some
+    // Moodle feeds repeat the same VEVENT across export ranges), then sort
+    // earliest-first.
+    const tasks = sortChronologically(collapseDuplicateTasks(dropExpiredTasks(candidates, now))).slice(0, 25);
 
     return NextResponse.json({ ok: true, tasks } satisfies MoodleSyncResponse);
   } catch (err) {

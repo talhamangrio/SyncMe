@@ -34,7 +34,7 @@ const SECTIONS: { title: string; paragraphs: string[] }[] = [
   {
     title: "Moodle calendar",
     paragraphs: [
-      "For Moodle, SyncMe only fetches the .ics calendar export URL that you personally paste into the app. That URL is stored locally in your browser (localStorage) and is never sent anywhere except to your own Moodle server to download the calendar.",
+      "For Moodle, SyncMe only fetches the .ics calendar export URL that you personally paste into the app. That URL is saved privately inside your own Google account (an app-hidden Drive folder that never appears in your Drive files) with a copy cached in your browser, so every device you sign in on connects automatically. It is never sent anywhere except to your own Moodle server to download the calendar.",
     ],
   },
   {

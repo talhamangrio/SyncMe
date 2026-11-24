@@ -37,6 +37,7 @@ import { BASE_CURVE } from "@/components/landing/reveal";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { DEMO_DONE, DEMO_DONE_TASKS, DEMO_EMAILS, DEMO_TASKS } from "@/lib/demo-data";
 import { addDaysKey, budapestTodayKey, dayKeyOf, sortChronologically } from "@/lib/dates";
+import { areDuplicateTasks, collapseDuplicateTasks } from "@/lib/task-dedupe";
 import type { GmailSyncResponse, MoodleSyncResponse, RawEmail, SyncMeUser, SyncTask, TaskFilter } from "@/lib/types";
 import {
   CATEGORY_UI,
@@ -48,6 +49,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const POLL_INTERVAL_MS = 30_000;
+/** Per-browser cache of the account-level Moodle feed URL (synced via /api/moodle/prefs). */
 const MOODLE_URL_KEY = "syncme_moodle_ics_url";
 /** Browser-side persistence: synced tasks survive reloads and later syncs — nothing fades away. */
 const GMAIL_TASKS_KEY = "syncme_gmail_tasks_v1";
@@ -143,12 +145,17 @@ function mergeTasks(
     byIdentity.set(key, !currentDated && tDated ? t : current);
   }
   const floorKey = addDaysKey(budapestTodayKey(), -2);
-  return [...byIdentity.values()]
-    .filter((t) => {
-      const day = dayKeyOf(t.dueDate);
-      return day === null || day >= floorKey;
-    })
-    .slice(0, 80);
+  // Twin collapse on top of identity dedupe: re-worded titles and dated vs
+  // undated variants of the same email merge into one row here, so duplicates
+  // that already reached this browser heal on the very next sync.
+  return collapseDuplicateTasks(
+    [...byIdentity.values()]
+      .filter((t) => {
+        const day = dayKeyOf(t.dueDate);
+        return day === null || day >= floorKey;
+      })
+      .slice(0, 80),
+  );
 }
 
 function mergeEmails(prev: RawEmail[], next: RawEmail[]): RawEmail[] {
@@ -257,8 +264,6 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
   const [moodleConnected, setMoodleConnected] = useState(false);
   const [filter, setFilter] = useState<TaskFilter>("All");
   const [moodleUrl, setMoodleUrl] = useState("");
-  const [savedMoodleUrl, setSavedMoodleUrl] = useState("");
-  const [moodleEditing, setMoodleEditing] = useState(false);
   const [moodleConnecting, setMoodleConnecting] = useState(false);
   const [moodleError, setMoodleError] = useState<string | null>(null);
   const [moodleSuccess, setMoodleSuccess] = useState<string | null>(null);
@@ -478,6 +483,23 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
     return () => clearInterval(timer);
   }, [isDemo, syncNow]);
 
+  // ── Account-level storage for the Moodle feed URL (best effort) ──────────
+  // The link is saved into the student's own Google Drive app-data folder via
+  // /api/moodle/prefs, so it follows the account: connect once on the phone,
+  // the laptop auto-connects after sign-in. Failures degrade silently to the
+  // per-browser copy.
+  const saveMoodlePrefs = useCallback(async (url: string) => {
+    try {
+      await fetch("/api/moodle/prefs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ icsUrl: url }),
+      });
+    } catch {
+      // Offline or account storage unavailable — this browser keeps the link.
+    }
+  }, []);
+
   // ── Moodle .ics connect (inline rail card, client side validation) ────────
   const connectMoodle = useCallback(async (url: string, silent = false) => {
     if (!isValidHttpsUrl(url)) {
@@ -507,12 +529,11 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
         mergeTasks(prev, tagSource(data.tasks, "Moodle"), doneRef.current, snapshotKeysOf(doneTasksRef.current)),
       );
       setMoodleConnected(true);
-      setSavedMoodleUrl(url);
-      setMoodleEditing(false);
       window.localStorage.setItem(MOODLE_URL_KEY, url);
+      void saveMoodlePrefs(url);
       if (!silent) {
         setMoodleError(null);
-        setMoodleSuccess("Calendar saved. Next sync in 30 seconds.");
+        setMoodleSuccess("Calendar saved to your account. Next sync in 30 seconds.");
       }
     } catch (err) {
       if (!silent) {
@@ -522,58 +543,80 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
     } finally {
       setMoodleConnecting(false);
     }
-  }, [adoptSnapshots]);
+  }, [adoptSnapshots, saveMoodlePrefs]);
 
   useEffect(() => {
     if (isDemo) return;
-    const saved = window.localStorage.getItem(MOODLE_URL_KEY);
-    if (saved) {
-      setMoodleUrl(saved);
-      setSavedMoodleUrl(saved);
-      void connectMoodle(saved, true);
-    }
-  }, [isDemo, connectMoodle]);
-
-  // ── Moodle feed editing: the pen flips the saved card into edit mode ───────
-  const startMoodleEdit = useCallback(() => {
-    setMoodleUrl(savedMoodleUrl);
-    setMoodleError(null);
-    setMoodleSuccess(null);
-    setMoodleEditing(true);
-    // The input mounts after the state flip — focus it on the next frame.
-    window.setTimeout(() => moodleInputRef.current?.focus(), 50);
-  }, [savedMoodleUrl]);
-
-  const cancelMoodleEdit = useCallback(() => {
-    setMoodleUrl(savedMoodleUrl);
-    setMoodleError(null);
-    setMoodleSuccess(null);
-    setMoodleEditing(false);
-  }, [savedMoodleUrl]);
+    let cancelled = false;
+    const restore = async () => {
+      const local = window.localStorage.getItem(MOODLE_URL_KEY) ?? "";
+      let accountUrl: string | null = null;
+      try {
+        const res = await fetch("/api/moodle/prefs", { cache: "no-store" });
+        if (res.ok) {
+          const data = (await res.json()) as { icsUrl?: string | null };
+          if (typeof data.icsUrl === "string" && data.icsUrl && isValidHttpsUrl(data.icsUrl)) {
+            accountUrl = data.icsUrl;
+          }
+        }
+      } catch {
+        // Offline — the per-browser copy below still reconnects.
+      }
+      if (cancelled) return;
+      const url = accountUrl ?? (local && isValidHttpsUrl(local) ? local : "");
+      if (!url) return;
+      setMoodleUrl(url);
+      if (accountUrl && accountUrl !== local) {
+        // The account link wins — refresh this browser's cache to match.
+        window.localStorage.setItem(MOODLE_URL_KEY, accountUrl);
+      }
+      if (!accountUrl && local && isValidHttpsUrl(local)) {
+        // First save from this browser — migrate the link up to the account.
+        void saveMoodlePrefs(local);
+      }
+      void connectMoodle(url, true);
+    };
+    void restore();
+    return () => {
+      cancelled = true;
+    };
+  }, [isDemo, connectMoodle, saveMoodlePrefs]);
 
   // ── Mark done: fade out, then remove; undo brings it straight back ────────
   const markTaskDone = useCallback(
     (task: SyncTask) => {
       const origin = moodleTasks.some((t) => t.id === task.id) ? "moodle" : "gmail";
       lastDoneRef.current = { task, origin };
+      // Twin collapse: the same deadline can exist once per feed (Moodle .ics
+      // event + its Gmail announcement). Completing one copy completes every
+      // twin — otherwise the duplicate would resurface on the next sync.
+      const twins = [...gmailTasks, ...moodleTasks].filter((t) => t.id !== task.id && areDuplicateTasks(task, t));
+      const twinOrigin = (t: SyncTask) =>
+        moodleTasks.some((m) => m.id === t.id) ? ("moodle" as const) : ("gmail" as const);
+      const removedIds = new Set<string>([task.id, ...twins.map((t) => t.id)]);
       const nextDone = new Set(doneRef.current);
       nextDone.add(task.id);
+      for (const twin of twins) nextDone.add(twin.id);
       doneRef.current = nextDone;
       setDoneIds(nextDone);
       const doneAtStamp = new Date().toISOString();
       const entry: DoneEntry = { task, origin };
-      doneTasksRef.current = { ...doneTasksRef.current, [task.id]: entry };
-      setDoneAt((prev) => ({ ...prev, [task.id]: doneAtStamp }));
-      setDoneTasks((prev) => ({ ...prev, [task.id]: entry }));
-      setGmailTasks((prev) => prev.filter((t) => t.id !== task.id));
-      setMoodleTasks((prev) => prev.filter((t) => t.id !== task.id));
+      const snapshots: Record<string, DoneEntry> = { [task.id]: entry };
+      for (const twin of twins) snapshots[twin.id] = { task: twin, origin: twinOrigin(twin) };
+      doneTasksRef.current = { ...doneTasksRef.current, ...snapshots };
+      const stamps: Record<string, string> = { [task.id]: doneAtStamp };
+      for (const twin of twins) stamps[twin.id] = doneAtStamp;
+      setDoneAt((prev) => ({ ...stamps, ...prev }));
+      setDoneTasks((prev) => ({ ...prev, ...snapshots }));
+      setGmailTasks((prev) => prev.filter((t) => !removedIds.has(t.id)));
+      setMoodleTasks((prev) => prev.filter((t) => !removedIds.has(t.id)));
       if (drawerTask?.id === task.id) setDrawerTask(null);
       toast.success("Task marked done", {
         description: `SyncMe will skip "${task.title}" from now on.`,
         action: { label: "Undo", onClick: () => undoDone() },
       });
     },
-    [moodleTasks, drawerTask],
+    [gmailTasks, moodleTasks, drawerTask],
   );
 
   /**
@@ -636,7 +679,9 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
 
   // ── Derived data ───────────────────────────────────────────────────────────
   const allTasks = useMemo(
-    () => sortChronologically([...gmailTasks, ...moodleTasks]),
+    // Cross-feed twin collapse: the same deadline extracted from Gmail and
+    // published on the Moodle .ics feed renders once (the calendar copy wins).
+    () => collapseDuplicateTasks(sortChronologically([...gmailTasks, ...moodleTasks])),
     [gmailTasks, moodleTasks],
   );
 
@@ -727,9 +772,17 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
   }, [allTasks, todayKey]);
   /** Completed task snapshots, most recently done first — powers the Done view. */
   const doneEntries = useMemo(() => {
-    return Object.values(doneTasks)
+    const entries = Object.values(doneTasks)
       .map((entry) => ({ ...entry, at: doneAt[entry.task.id] ?? "" }))
       .sort((a, b) => (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0));
+    // One completed row per real task — twin copies completed together
+    // collapse into a single entry here.
+    const kept: typeof entries = [];
+    for (const entry of entries) {
+      if (kept.some((k) => areDuplicateTasks(k.task, entry.task))) continue;
+      kept.push(entry);
+    }
+    return kept;
   }, [doneTasks, doneAt]);
 
   /**
@@ -1163,15 +1216,15 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
 
           {/* ── Right rail ─────────────────────────────────────────────────── */}
           <aside aria-label="Sync status and Moodle calendar" className="space-y-4 lg:sticky lg:top-24 lg:self-start">
-            {/* Moodle calendar card — saved feeds show a pen to edit the link */}
+            {/* Moodle calendar card — the pen jumps straight to the link editor */}
             <div className="rounded-2xl border border-border bg-white p-5">
               <div className="flex items-center justify-between gap-2">
                 <h2 className="title-2 text-ink">Moodle calendar</h2>
                 <div className="flex items-center gap-1">
-                  {moodleConnected && !moodleEditing && (
+                  {moodleConnected && (
                     <button
                       type="button"
-                      onClick={startMoodleEdit}
+                      onClick={focusMoodleInput}
                       aria-label="Edit Moodle calendar URL"
                       title="Edit Moodle calendar URL"
                       className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-ink-3 transition-colors duration-200 ease-base hover:bg-alt hover:text-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand active:scale-[0.98]"
@@ -1186,68 +1239,52 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
                     )}
                   >
                     {moodleConnected && <CheckCircle className="h-4 w-4" aria-hidden="true" />}
-                    {moodleConnected ? (moodleEditing ? "Editing" : "Connected") : "Not connected"}
+                    {moodleConnected ? "Connected" : "Not connected"}
                   </span>
                 </div>
               </div>
               <p className="body-6 mt-2 text-ink-3">
-                Paste your private elearning.unideb.hu calendar feed once. It stays in your own browser.
+                Paste your private elearning.unideb.hu calendar feed once — saved to your own Google account, so
+                every device you sign in on connects automatically.
               </p>
-              {moodleConnected && !moodleEditing ? (
-                <div className="mt-4 rounded-xl border border-border bg-alt p-3">
-                  <p className="caption-4 text-ink-3">Saved calendar feed</p>
-                  <p className="caption-2 mt-1 break-all font-mono text-ink-2">
-                    {savedMoodleUrl || moodleUrl}
-                  </p>
-                  <p className="caption-4 mt-2 text-ink-3">
+              <div className="mt-4 space-y-2">
+                <Input
+                  ref={moodleInputRef}
+                  id="moodle-ics-input"
+                  value={moodleUrl}
+                  onChange={(e) => {
+                    setMoodleUrl(e.target.value);
+                    setMoodleError(null);
+                    setMoodleSuccess(null);
+                  }}
+                  placeholder="https://elearning.unideb.hu/calendar/export.php?..."
+                  aria-label="Moodle .ics calendar URL"
+                  className="caption-1 rounded-lg border-border bg-alt px-3 py-2 text-ink placeholder:text-ink-3"
+                />
+                {moodleConnected && (
+                  <p className="caption-4 text-ink-3">
                     Auto-fetches with every sync — click the pen to change the link.
                   </p>
-                </div>
-              ) : (
-                <div className="mt-4 space-y-2">
-                  <Input
-                    ref={moodleInputRef}
-                    id="moodle-ics-input"
-                    value={moodleUrl}
-                    onChange={(e) => {
-                      setMoodleUrl(e.target.value);
-                      setMoodleError(null);
-                      setMoodleSuccess(null);
-                    }}
-                    placeholder="https://elearning.unideb.hu/calendar/export.php?..."
-                    aria-label="Moodle .ics calendar URL"
-                    className="caption-1 rounded-lg border-border bg-alt px-3 py-2 text-ink placeholder:text-ink-3"
+                )}
+                {moodleError && (
+                  <p role="alert" className="caption-1 text-status-high">
+                    {moodleError}
+                  </p>
+                )}
+                {moodleSuccess && <p className="caption-1 text-cat-medical">{moodleSuccess}</p>}
+                <button
+                  type="button"
+                  onClick={() => void connectMoodle(moodleUrl)}
+                  disabled={moodleConnecting || !moodleUrl.trim()}
+                  className={cn(BUTTON_PRIMARY, "w-full")}
+                >
+                  <ArrowsClockwise
+                    className={cn("h-4 w-4", moodleConnecting && "animate-spin")}
+                    aria-hidden="true"
                   />
-                  {moodleError && (
-                    <p role="alert" className="caption-1 text-status-high">
-                      {moodleError}
-                    </p>
-                  )}
-                  {moodleSuccess && <p className="caption-1 text-cat-medical">{moodleSuccess}</p>}
-                  <button
-                    type="button"
-                    onClick={() => void connectMoodle(moodleUrl)}
-                    disabled={moodleConnecting || !moodleUrl.trim()}
-                    className={cn(BUTTON_PRIMARY, "w-full")}
-                  >
-                    <ArrowsClockwise
-                      className={cn("h-4 w-4", moodleConnecting && "animate-spin")}
-                      aria-hidden="true"
-                    />
-                    {moodleEditing ? "Update feed" : "Save feed"}
-                  </button>
-                  {moodleEditing && (
-                    <button
-                      type="button"
-                      onClick={cancelMoodleEdit}
-                      disabled={moodleConnecting}
-                      className={cn(BUTTON_SECONDARY, "w-full")}
-                    >
-                      Cancel
-                    </button>
-                  )}
-                </div>
-              )}
+                  {moodleConnected ? "Update feed" : "Save feed"}
+                </button>
+              </div>
             </div>
 
             {/* Conflict summary card */}
@@ -1330,11 +1367,12 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
             <div className="rounded-2xl border border-border bg-white p-5">
               <h2 className="title-2 inline-flex items-center gap-2 text-ink">
                 <ShieldCheck className="h-4 w-4 text-cat-medical" aria-hidden="true" />
-                Read only, zero storage
+                Read only, you own the data
               </h2>
               <p className="body-6 mt-2 text-ink-3">
                 SyncMe uses gmail.readonly solely to extract student deadlines. Emails are fetched on demand and
-                never stored or sold.{" "}
+                never stored or sold — your Moodle calendar link lives only in your own Google account’s hidden
+                app folder and this browser.{" "}
                 <a
                   href="/privacy"
                   className="underline underline-offset-4 transition-colors duration-300 ease-base hover:text-ink"

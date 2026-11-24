@@ -10,6 +10,7 @@ import { dedupeTasks, extractTasks } from "@/lib/zai";
 import { extractTasksGemini } from "@/lib/gemini";
 import { dropExpiredTasks, normalizeDueDate, sortChronologically } from "@/lib/dates";
 import { inferFutureDateFromText } from "@/lib/subject-date";
+import { collapseDuplicateTasks } from "@/lib/task-dedupe";
 import type { RawEmail, SyncTask } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -56,7 +57,9 @@ function rescueUndatedTasks(tasks: SyncTask[], emails: RawEmail[]): SyncTask[] {
  *      falling back to Z.ai when Gemini is unavailable,
  *   4. deterministic post-processing on the server: normalize every dueDate
  *      into ISO-8601 `YYYY-MM-DDTHH:mm:ss` (Europe/Budapest), DROP any task
- *      dated strictly before today, dedupe, and sort strictly ascending
+ *      dated strictly before today, dedupe and COLLAPSE duplicate twins (the
+ *      extractor may emit both a dated subject-reading copy and an undated
+ *      body copy of the same email), then sort strictly ascending
  *      chronological (`getTime() - getTime()` — earliest upcoming first),
  *   5. return { tasks, emails, aiStatus }.
  *
@@ -80,12 +83,15 @@ export async function GET() {
   const attempt = async (accessToken: string) => {
     const emails = await fetchUniversityEmails(accessToken, 12);
     const { tasks, aiStatus, engine } = await extractWithFallback(emails);
-    // Deterministic expiration guard + normalization + subject rescue + strict
-    // chronological order — nothing dated before today (Europe/Budapest) ever
-    // leaves here, and undated tasks whose subject carries a date are healed.
+    // Deterministic expiration guard + normalization + subject rescue + twin
+    // collapse + strict chronological order — nothing dated before today
+    // (Europe/Budapest) ever leaves here, undated tasks whose subject carries
+    // a date are healed, and the same email can never yield two rows. Expired
+    // tasks are dropped BEFORE the collapse so an expired wrong twin can never
+    // swallow its correct future sibling.
     const dated: SyncTask[] = tasks.map((t) => ({ ...t, dueDate: normalizeDueDate(t.dueDate) }));
     const rescued = rescueUndatedTasks(dated, emails);
-    const cleaned = sortChronologically(dropExpiredTasks(dedupeTasks(rescued)));
+    const cleaned = sortChronologically(collapseDuplicateTasks(dropExpiredTasks(dedupeTasks(rescued))));
     return { emails, tasks: cleaned, aiStatus, engine };
   };
 

@@ -22,7 +22,7 @@ export const FAQS: FaqEntry[] = [
   },
   {
     q: "Do I need to give SyncMe my Moodle password?",
-    a: "Never. You paste your private .ics calendar export URL from elearning.unideb.hu once, and it stays in your own browser.",
+    a: "Never. You paste your private .ics calendar export URL from elearning.unideb.hu once, and SyncMe remembers it for your account. Every device you sign in on connects automatically.",
   },
   {
     q: "What happens when two deadlines collide?",
@@ -38,6 +38,6 @@ export const FAQS: FaqEntry[] = [
   },
   {
     q: "How do I disconnect?",
-    a: "Log out at any time from the dashboard menu. Your Moodle link stays in your own browser and is removed when you clear it.",
+    a: "Log out at any time from the dashboard menu. Your Moodle link is saved only inside your own Google account in a hidden app folder, and it disappears when you revoke SyncMe's access from your Google Account permissions page.",
   },
 ];
