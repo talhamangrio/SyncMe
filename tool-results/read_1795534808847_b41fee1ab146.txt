@@ -1,0 +1,922 @@
+     1→     1→"use client";
+     2→     2→
+     3→     3→import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+     4→     4→import { format } from "date-fns";
+     5→     5→import { motion } from "framer-motion";
+     6→     6→import { toast } from "sonner";
+     7→     7→import {
+     8→     8→  BookOpen,
+     9→     9→  CalendarDays,
+    10→    10→  CheckCircle2,
+    11→    11→  CircleCheck,
+    12→    12→  FlaskConical,
+    13→    13→  GraduationCap,
+    14→    14→  HeartPulse,
+    15→    15→  Inbox,
+    16→    16→  Loader2,
+    17→    17→  LogOut,
+    18→    18→  MailWarning,
+    19→    19→  RefreshCw,
+    20→    20→  ShieldCheck,
+    21→    21→  Stamp,
+    22→    22→  Sun,
+    23→    23→  Zap,
+    24→    24→  type LucideIcon,
+    25→    25→} from "lucide-react";
+    26→    26→import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+    27→    27→import { Badge } from "@/components/ui/badge";
+    28→    28→import { Button } from "@/components/ui/button";
+    29→    29→import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+    30→    30→import {
+    31→    31→  Dialog,
+    32→    32→  DialogContent,
+    33→    33→  DialogDescription,
+    34→    34→  DialogFooter,
+    35→    35→  DialogHeader,
+    36→    36→  DialogTitle,
+    37→    37→} from "@/components/ui/dialog";
+    38→    38→import { Input } from "@/components/ui/input";
+    39→    39→import {
+    40→    40→  Sheet,
+    41→    41→  SheetContent,
+    42→    42→  SheetDescription,
+    43→    43→  SheetHeader,
+    44→    44→  SheetTitle,
+    45→    45→  SheetTrigger,
+    46→    46→} from "@/components/ui/sheet";
+    47→    47→import { Skeleton } from "@/components/ui/skeleton";
+    48→    48→import { Logo } from "@/components/logo";
+    49→    49→import { SiteFooter } from "@/components/site-footer";
+    50→    50→import { findConflicts } from "@/lib/conflicts";
+    51→    51→import { DEMO_EMAILS, DEMO_TASKS } from "@/lib/demo-data";
+    52→    52→import { addDaysKey, budapestTodayKey, dayKeyOf, normalizeDueDate, timeBadgeOf } from "@/lib/dates";
+    53→    53→import { cn } from "@/lib/utils";
+    54→    54→import {
+    55→    55→  CATEGORY_STYLES,
+    56→    56→  PRIORITY_DOTS,
+    57→    57→  PRIORITY_STYLES,
+    58→    58→  TASK_CATEGORIES,
+    59→    59→  type GmailSyncResponse,
+    60→    60→  type MoodleSyncResponse,
+    61→    61→  type RawEmail,
+    62→    62→  type SyncMeUser,
+    63→    63→  type SyncTask,
+    64→    64→  type TaskCategory,
+    65→    65→  type TaskPriority,
+    66→    66→} from "@/lib/types";
+    67→    67→
+    68→    68→const POLL_INTERVAL_MS = 30_000;
+    69→    69→const MOODLE_URL_KEY = "syncme_moodle_ics_url";
+    70→    70→/** Browser-side persistence: synced tasks survive reloads and later syncs — nothing fades away. */
+    71→    71→const GMAIL_TASKS_KEY = "syncme_gmail_tasks_v1";
+    72→    72→const MOODLE_TASKS_KEY = "syncme_moodle_tasks_v1";
+    73→    73→const EMAILS_KEY = "syncme_emails_v1";
+    74→    74→const DONE_KEY = "syncme_done_v1";
+    75→    75→
+    76→    76→/** Marks the user as handled — SyncMe skips these emails forever after. */
+    77→    77→function loadJson<T>(key: string, fallback: T): T {
+    78→    78→  if (typeof window === "undefined") return fallback;
+    79→    79→  try {
+    80→    80→    const raw = window.localStorage.getItem(key);
+    81→    81→    return raw ? (JSON.parse(raw) as T) : fallback;
+    82→    82→  } catch {
+    83→    83→    return fallback;
+    84→    84→  }
+    85→    85→}
+    86→    86→
+    87→    87→function saveJson(key: string, value: unknown): void {
+    88→    88→  try {
+    89→    89→    window.localStorage.setItem(key, JSON.stringify(value));
+    90→    90→  } catch {
+    91→    91→    // Storage blocked or full — persistence is best effort, sync still works.
+    92→    92→  }
+    93→    93→}
+    94→    94→
+    95→    95→/**
+    96→    96→ * Union merge: fresh tasks overwrite their previous version, tasks that were
+    97→    97→ * extracted earlier are kept even if this sync missed them, and done tasks
+    98→    98→ * never come back. Expired entries (dated strictly before today) are pruned —
+    99→    99→ * the dashboard can never resurrect the past.
+   100→   100→ */
+   101→   101→function mergeTasks(prev: SyncTask[], next: SyncTask[], done: Set<string>): SyncTask[] {
+   102→   102→  const byId = new Map<string, SyncTask>();
+   103→   103→  for (const t of prev) if (!done.has(t.id)) byId.set(t.id, t);
+   104→   104→  for (const t of next) if (!done.has(t.id)) byId.set(t.id, t);
+   105→   105→  const today = budapestTodayKey();
+   106→   106→  return [...byId.values()]
+   107→   107→    .filter((t) => {
+   108→   108→      const day = dayKeyOf(t.dueDate);
+   109→   109→      return day === null || day >= today;
+   110→   110→    })
+   111→   111→    .slice(0, 80);
+   112→   112→}
+   113→   113→
+   114→   114→function mergeEmails(prev: RawEmail[], next: RawEmail[]): RawEmail[] {
+   115→   115→  const byId = new Map<string, RawEmail>();
+   116→   116→  for (const e of prev) byId.set(e.id, e);
+   117→   117→  for (const e of next) byId.set(e.id, e);
+   118→   118→  return [...byId.values()].sort((a, b) => Date.parse(b.date) - Date.parse(a.date)).slice(0, 50);
+   119→   119→}
+   120→   120→
+   121→   121→function formatDue(dueDate: string): string {
+   122→   122→  if (dueDate === "unknown") return "No date detected";
+   123→   123→  const d = new Date(dueDate);
+   124→   124→  if (Number.isNaN(d.getTime())) return "No date detected";
+   125→   125→  return format(d, "EEE, d MMM · HH:mm");
+   126→   126→}
+   127→   127→
+   128→   128→/** Sort key: normalized Budapest ISO parsed as ms; undated tasks sink to the end. */
+   129→   129→function dueMsOf(task: SyncTask): number {
+   130→   130→  const normalized = normalizeDueDate(task.dueDate);
+   131→   131→  return normalized === "unknown" ? Number.POSITIVE_INFINITY : Date.parse(normalized);
+   132→   132→}
+   133→   133→
+   134→   134→function initialsOf(name: string): string {
+   135→   135→  const parts = name.trim().split(/\s+/);
+   136→   136→  const chars = parts.map((p) => p[0]?.toUpperCase() ?? "").join("");
+   137→   137→  return chars.slice(0, 2) || "S";
+   138→   138→}
+   139→   139→
+   140→   140→function greetingOf(d: Date): string {
+   141→   141→  const h = d.getHours();
+   142→   142→  if (h < 12) return "Good morning";
+   143→   143→  if (h < 18) return "Good afternoon";
+   144→   144→  return "Good evening";
+   145→   145→}
+   146→   146→
+   147→   147→/** Human label for a `YYYY-MM-DD` day key: "Tomorrow • Nov 25", "Thu • Nov 26", … */
+   148→   148→function dayLabel(dayKey: string, todayKey: string): string {
+   149→   149→  const d = new Date(`${dayKey}T12:00:00Z`);
+   150→   150→  const sameYear = d.getUTCFullYear() === new Date().getUTCFullYear();
+   151→   151→  const datePart = `${format(d, "MMM d")}${sameYear ? "" : `, ${format(d, "yyyy")}`}`;
+   152→   152→  if (dayKey === addDaysKey(todayKey, 1)) return `Tomorrow • ${datePart}`;
+   153→   153→  return `${format(d, "EEE")} • ${datePart}`;
+   154→   154→}
+   155→   155→
+   156→   156→/** A friendly icon per category — natural metaphors instead of tech jargon. */
+   157→   157→const CATEGORY_ICONS: Record<TaskCategory, LucideIcon> = {
+   158→   158→  Neptun: GraduationCap,
+   159→   159→  Moodle: BookOpen,
+   160→   160→  Medical: HeartPulse,
+   161→   161→  Immigration: Stamp,
+   162→   162→};
+   163→   163→
+   164→   164→const PRIORITY_RANK: Record<TaskPriority, number> = { High: 0, Medium: 1, Low: 2 };
+   165→   165→
+   166→   166→function TaskRow({
+   167→   167→  task,
+   168→   168→  index,
+   169→   169→  onDone,
+   170→   170→  highlight = false,
+   171→   171→}: {
+   172→   172→  task: SyncTask;
+   173→   173→  index: number;
+   174→   174→  onDone: (task: SyncTask) => void;
+   175→   175→  highlight?: boolean;
+   176→   176→}) {
+   177→   177→  const cat = CATEGORY_STYLES[task.category];
+   178→   178→  const CatIcon = CATEGORY_ICONS[task.category];
+   179→   179→  const due = dueMsOf(task);
+   180→   180→  const urgent = !Number.isNaN(due) && due - Date.now() > 0 && due - Date.now() < 48 * 3_600_000;
+   181→   181→  return (
+   182→   182→    <motion.li
+   183→   183→      initial={{ opacity: 0, x: -8 }}
+   184→   184→      animate={{ opacity: 1, x: 0 }}
+   185→   185→      transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1], delay: Math.min(index * 0.035, 0.3) }}
+   186→   186→      className="list-none"
+   187→   187→    >
+   188→   188→      <div
+   189→   189→        title={`From: ${task.sourceEmailSubject}`}
+   190→   190→        className={cn(
+   191→   191→          "flex items-start gap-3 rounded-2xl border px-4 py-3 transition-all duration-300 ease-base sm:px-5",
+   192→   192→          highlight
+   193→   193→            ? "border-primary/30 bg-primary/[0.05] shadow-soft hover:shadow-lift"
+   194→   194→            : "border-border/60 bg-card shadow-soft hover:border-primary/30 hover:shadow-lift",
+   195→   195→        )}
+   196→   196→      >
+   197→   197→        {/* Exact time badge — the anchor of the chronological timeline. */}
+   198→   198→        <span
+   199→   199→          suppressHydrationWarning
+   200→   200→          className={cn(
+   201→   201→            "mt-0.5 inline-flex h-9 min-w-[3.4rem] shrink-0 items-center justify-center rounded-xl px-2 text-[13px] font-bold tabular-nums",
+   202→   202→            urgent
+   203→   203→              ? "bg-rose-400/12 text-rose-300 ring-1 ring-inset ring-rose-400/30"
+   204→   204→              : "bg-muted text-foreground",
+   205→   205→          )}
+   206→   206→        >
+   207→   207→          {timeBadgeOf(task.dueDate)}
+   208→   208→        </span>
+   209→   209→        <div className="min-w-0 flex-1">
+   210→   210→          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+   211→   211→            <h3 className="text-sm font-semibold leading-snug text-foreground">{task.title}</h3>
+   212→   212→            {task.priority === "High" && (
+   213→   213→              <span className="inline-flex items-center gap-1 rounded-full bg-rose-400/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-300 ring-1 ring-inset ring-rose-400/30">
+   214→   214→                High priority
+   215→   215→              </span>
+   216→   216→            )}
+   217→   217→          </div>
+   218→   218→          <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+   219→   219→            <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium", cat.chip)}>
+   220→   220→              <CatIcon className="h-3 w-3" aria-hidden="true" />
+   221→   221→              {task.category}
+   222→   222→            </span>
+   223→   223→            <span
+   224→   224→              className={cn("inline-flex items-center gap-1 text-[11px] font-semibold", PRIORITY_STYLES[task.priority])}
+   225→   225→            >
+   226→   226→              <span className={cn("h-1.5 w-1.5 rounded-full", PRIORITY_DOTS[task.priority])} aria-hidden="true" />
+   227→   227→              {task.priority}
+   228→   228→            </span>
+   229→   229→          </div>
+   230→   230→          <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+   231→   231→            {task.actionSummary}
+   232→   232→          </p>
+   233→   233→        </div>
+   234→   234→        <button
+   235→   235→          type="button"
+   236→   236→          onClick={() => onDone(task)}
+   237→   237→          aria-label={`Mark "${task.title}" as done`}
+   238→   238→          title="Mark as done — SyncMe will skip this email from now on"
+   239→   239→          className="-mr-1 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted-foreground/40 transition-colors duration-300 ease-base hover:bg-emerald-400/10 hover:text-emerald-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring active:scale-95"
+   240→   240→        >
+   241→   241→          <CircleCheck className="h-[18px] w-[18px]" />
+   242→   242→        </button>
+   243→   243→      </div>
+   244→   244→    </motion.li>
+   245→   245→  );
+   246→   246→}
+   247→   247→
+   248→   248→export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: boolean }) {
+   249→   249→  const [gmailTasks, setGmailTasks] = useState<SyncTask[]>(isDemo ? DEMO_TASKS : []);
+   250→   250→  const [moodleTasks, setMoodleTasks] = useState<SyncTask[]>([]);
+   251→   251→  const [emails, setEmails] = useState<RawEmail[]>(isDemo ? DEMO_EMAILS : []);
+   252→   252→  const [syncing, setSyncing] = useState(!isDemo);
+   253→   253→  const [lastSync, setLastSync] = useState<Date | null>(null);
+   254→   254→  const [connected, setConnected] = useState(true);
+   255→   255→  const [aiStatus, setAiStatus] = useState<"ai" | "heuristic" | null>(null);
+   256→   256→  const [engine, setEngine] = useState<"gemini" | "zai" | "rule" | null>(null);
+   257→   257→  const [doneIds, setDoneIds] = useState<Set<string>>(new Set());
+   258→   258→  const [moodleConnected, setMoodleConnected] = useState(false);
+   259→   259→  const [filter, setFilter] = useState<"All" | TaskCategory>("All");
+   260→   260→  const [moodleOpen, setMoodleOpen] = useState(false);
+   261→   261→  const [moodleUrl, setMoodleUrl] = useState("");
+   262→   262→  const [moodleConnecting, setMoodleConnecting] = useState(false);
+   263→   263→  const [todayKey, setTodayKey] = useState<string>(() => budapestTodayKey());
+   264→   264→
+   265→   265→  /** Ref mirror of doneIds so the 30s polling merge never resurrects done tasks. */
+   266→   266→  const doneRef = useRef<Set<string>>(new Set());
+   267→   267→
+   268→   268→  // ── Keep the Budapest "today" key fresh (handles midnight rollover) ────────
+   269→   269→  useEffect(() => {
+   270→   270→    const update = () => setTodayKey(budapestTodayKey());
+   271→   271→    update();
+   272→   272→    const timer = setInterval(update, 60_000);
+   273→   273→    return () => clearInterval(timer);
+   274→   274→  }, []);
+   275→   275→
+   276→   276→  // ── Restore the persisted session state before the first sync fires ───────
+   277→   277→  useEffect(() => {
+   278→   278→    if (isDemo) return;
+   279→   279→    const savedTasks = loadJson<SyncTask[]>(GMAIL_TASKS_KEY, []);
+   280→   280→    const savedMoodle = loadJson<SyncTask[]>(MOODLE_TASKS_KEY, []);
+   281→   281→    const savedEmails = loadJson<RawEmail[]>(EMAILS_KEY, []);
+   282→   282→    const savedDone = loadJson<string[]>(DONE_KEY, []);
+   283→   283→    doneRef.current = new Set(savedDone);
+   284→   284→    setDoneIds(new Set(savedDone));
+   285→   285→    setGmailTasks((prev) => (prev.length === 0 ? savedTasks : prev));
+   286→   286→    setMoodleTasks((prev) => (prev.length === 0 ? savedMoodle : prev));
+   287→   287→    setEmails((prev) => (prev.length === 0 ? savedEmails : prev));
+   288→   288→    if (savedMoodle.length > 0) setMoodleConnected(true);
+   289→   289→  }, [isDemo]);
+   290→   290→
+   291→   291→  // ── Persist on every change (best effort, browser only — zero servers) ────
+   292→   292→  useEffect(() => {
+   293→   293→    if (!isDemo) saveJson(GMAIL_TASKS_KEY, gmailTasks);
+   294→   294→  }, [gmailTasks, isDemo]);
+   295→   295→  useEffect(() => {
+   296→   296→    if (!isDemo) saveJson(MOODLE_TASKS_KEY, moodleTasks);
+   297→   297→  }, [moodleTasks, isDemo]);
+   298→   298→  useEffect(() => {
+   299→   299→    if (!isDemo) saveJson(EMAILS_KEY, emails);
+   300→   300→  }, [emails, isDemo]);
+   301→   301→  useEffect(() => {
+   302→   302→    if (!isDemo) saveJson(DONE_KEY, [...doneIds]);
+   303→   303→  }, [doneIds, isDemo]);
+   304→   304→
+   305→   305→  // ── Gmail sync (also runs on load and polls every 30s) ────────────────────
+   306→   306→  const syncNow = useCallback(
+   307→   307→    async (silent = false) => {
+   308→   308→      if (isDemo) {
+   309→   309→        if (!silent) {
+   310→   310→          toast.info("Demo sandbox", {
+   311→   311→            description: "Simulated sync — connect real Gmail from the landing page to run the live pipeline.",
+   312→   312→          });
+   313→   313→        }
+   314→   314→        setLastSync(new Date());
+   315→   315→        return;
+   316→   316→      }
+   317→   317→      setSyncing(true);
+   318→   318→      try {
+   319→   319→        const res = await fetch("/api/gmail/sync", { cache: "no-store" });
+   320→   320→        const data = (await res.json()) as GmailSyncResponse;
+   321→   321→        if (res.status === 401 || !data.ok) {
+   322→   322→          if (res.status === 401) {
+   323→   323→            setConnected(false);
+   324→   324→            if (!silent) {
+   325→   325→              toast.error("Gmail not connected", {
+   326→   326→                description: "Your session expired or is missing. Reconnect below — no consent screen needed.",
+   327→   327→              });
+   328→   328→            }
+   329→   329→          } else if (!silent) {
+   330→   330→            toast.error("Sync failed", { description: data.error ?? `HTTP ${res.status}` });
+   331→   331→          }
+   332→   332→          return;
+   333→   333→        }
+   334→   334→        // Merge instead of replace: previously synced tasks never fade away.
+   335→   335→        setGmailTasks((prev) => mergeTasks(prev, data.tasks, doneRef.current));
+   336→   336→        setEmails((prev) => mergeEmails(prev, data.emails));
+   337→   337→        setAiStatus(data.aiStatus);
+   338→   338→        setEngine(data.engine ?? null);
+   339→   339→        setConnected(true);
+   340→   340→        setLastSync(new Date());
+   341→   341→        if (!silent) {
+   342→   342→          toast.success(
+   343→   343→            `${data.tasks.length} task${data.tasks.length === 1 ? "" : "s"} extracted`,
+   344→   344→            {
+   345→   345→              description:
+   346→   346→                data.aiStatus === "heuristic"
+   347→   347→                  ? "AI was unavailable — used the rule-based extractor."
+   348→   348→                  : `${data.engine === "gemini" ? "Gemini" : "GLM"} scanned ${data.emails.length} university email${data.emails.length === 1 ? "" : "s"} (last 30 days).`,
+   349→   349→            },
+   350→   350→          );
+   351→   351→        }
+   352→   352→      } catch (err) {
+   353→   353→        if (!silent) toast.error("Sync failed", { description: String(err) });
+   354→   354→      } finally {
+   355→   355→        setSyncing(false);
+   356→   356→      }
+   357→   357→    },
+   358→   358→    [isDemo],
+   359→   359→  );
+   360→   360→
+   361→   361→  useEffect(() => {
+   362→   362→    if (isDemo) return;
+   363→   363→    void syncNow(true);
+   364→   364→    const timer = setInterval(() => void syncNow(true), POLL_INTERVAL_MS);
+   365→   365→    return () => clearInterval(timer);
+   366→   366→  }, [isDemo, syncNow]);
+   367→   367→
+   368→   368→  // ── Moodle .ics connect ────────────────────────────────────────────────────
+   369→   369→  const connectMoodle = useCallback(
+   370→   370→    async (url: string, silent = false) => {
+   371→   371→      if (!/^https?:\/\/.+/i.test(url)) {
+   372→   372→        if (!silent) toast.error("Invalid calendar URL", { description: "Paste a full http(s) .ics export URL." });
+   373→   373→        return;
+   374→   374→      }
+   375→   375→      setMoodleConnecting(true);
+   376→   376→      try {
+   377→   377→        const res = await fetch("/api/moodle/sync", {
+   378→   378→          method: "POST",
+   379→   379→          headers: { "Content-Type": "application/json" },
+   380→   380→          body: JSON.stringify({ icsUrl: url }),
+   381→   381→        });
+   382→   382→        const data = (await res.json()) as MoodleSyncResponse;
+   383→   383→        if (!res.ok || !data.ok) {
+   384→   384→          if (!silent) toast.error("Moodle sync failed", { description: data.error ?? `HTTP ${res.status}` });
+   385→   385→          return;
+   386→   386→        }
+   387→   387→        setMoodleTasks((prev) => mergeTasks(prev, data.tasks, doneRef.current));
+   388→   388→        setMoodleConnected(true);
+   389→   389→        window.localStorage.setItem(MOODLE_URL_KEY, url);
+   390→   390→        if (!silent) {
+   391→   391→          toast.success(`${data.tasks.length} Moodle event${data.tasks.length === 1 ? "" : "s"} imported`, {
+   392→   392→            description: "Deadlines from your e-learning calendar now appear alongside Gmail tasks.",
+   393→   393→          });
+   394→   394→          setMoodleOpen(false);
+   395→   395→        }
+   396→   396→      } catch (err) {
+   397→   397→        if (!silent) toast.error("Moodle sync failed", { description: String(err) });
+   398→   398→      } finally {
+   399→   399→        setMoodleConnecting(false);
+   400→   400→      }
+   401→   401→    },
+   402→   402→    [],
+   403→   403→  );
+   404→   404→
+   405→   405→  useEffect(() => {
+   406→   406→    if (isDemo) return;
+   407→   407→    const saved = window.localStorage.getItem(MOODLE_URL_KEY);
+   408→   408→    if (saved) {
+   409→   409→      setMoodleUrl(saved);
+   410→   410→      void connectMoodle(saved, true);
+   411→   411→    }
+   412→   412→  }, [isDemo, connectMoodle]);
+   413→   413→
+   414→   414→  /** Mark as done: hidden now, skipped by every future sync, remembered forever. */
+   415→   415→  const markTaskDone = useCallback((task: SyncTask) => {
+   416→   416→    const next = new Set(doneRef.current);
+   417→   417→    next.add(task.id);
+   418→   418→    doneRef.current = next;
+   419→   419→    setDoneIds(next);
+   420→   420→    setGmailTasks((prev) => prev.filter((t) => t.id !== task.id));
+   421→   421→    setMoodleTasks((prev) => prev.filter((t) => t.id !== task.id));
+   422→   422→    toast.success("Marked as done", {
+   423→   423→      description: `SyncMe will skip "${task.title}" from now on.`,
+   424→   424→    });
+   425→   425→  }, []);
+   426→   426→
+   427→   427→  const logout = useCallback(async () => {
+   428→   428→    try {
+   429→   429→      await fetch("/api/auth/logout", { method: "POST" });
+   430→   430→    } finally {
+   431→   431→      window.location.href = "/";
+   432→   432→    }
+   433→   433→  }, []);
+   434→   434→
+   435→   435→  // ── Derived data ───────────────────────────────────────────────────────────
+   436→   436→  const allTasks = useMemo(() => {
+   437→   437→    const merged = [...gmailTasks, ...moodleTasks];
+   438→   438→    // Strict ascending chronological order — earliest date/time first, undated last.
+   439→   439→    return [...merged].sort((a, b) => dueMsOf(a) - dueMsOf(b));
+   440→   440→  }, [gmailTasks, moodleTasks]);
+   441→   441→
+   442→   442→  /** Client-side date guard: expired tasks can never render (covers demo data too). */
+   443→   443→  const visibleTasks = useMemo(() => {
+   444→   444→    const list = filter === "All" ? allTasks : allTasks.filter((t) => t.category === filter);
+   445→   445→    return list.filter((t) => {
+   446→   446→      const day = dayKeyOf(t.dueDate);
+   447→   447→      return day === null || day >= todayKey;
+   448→   448→    });
+   449→   449→  }, [allTasks, filter, todayKey]);
+   450→   450→
+   451→   451→  /** Section 1 — everything due today: High priority first, then by time. */
+   452→   452→  const focusTasks = useMemo(
+   453→   453→    () =>
+   454→   454→      visibleTasks
+   455→   455→        .filter((t) => dayKeyOf(t.dueDate) === todayKey)
+   456→   456→        .sort((a, b) => PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority] || dueMsOf(a) - dueMsOf(b)),
+   457→   457→    [visibleTasks, todayKey],
+   458→   458→  );
+   459→   459→
+   460→   460→  /** Section 2 — everything after today, grouped by day, strictly ascending. */
+   461→   461→  const upcomingDays = useMemo(() => {
+   462→   462→    const groups = new Map<string, SyncTask[]>();
+   463→   463→    const undated: SyncTask[] = [];
+   464→   464→    for (const t of visibleTasks) {
+   465→   465→      const day = dayKeyOf(t.dueDate);
+   466→   466→      if (day === null) {
+   467→   467→        undated.push(t);
+   468→   468→        continue;
+   469→   469→      }
+   470→   470→      if (day <= todayKey) continue; // today lives in Today's Focus
+   471→   471→      const bucket = groups.get(day);
+   472→   472→      if (bucket) bucket.push(t);
+   473→   473→      else groups.set(day, [t]);
+   474→   474→    }
+   475→   475→    const days = [...groups.entries()]
+   476→   476→      .sort(([a], [b]) => a.localeCompare(b))
+   477→   477→      .map(([day, items]) => ({ key: day, items: items.sort((a, b) => dueMsOf(a) - dueMsOf(b)) }));
+   478→   478→    if (undated.length > 0) days.push({ key: "undated", items: undated });
+   479→   479→    return days;
+   480→   480→  }, [visibleTasks, todayKey]);
+   481→   481→
+   482→   482→  /** The very next chronological task — previewed when today is clear. */
+   483→   483→  const nextTask = upcomingDays[0]?.items[0] ?? null;
+   484→   484→
+   485→   485→  const conflicts = useMemo(() => findConflicts(visibleTasks), [visibleTasks]);
+   486→   486→
+   487→   487→  const categoryCounts = useMemo(() => {
+   488→   488→    const counts = new Map<"All" | TaskCategory, number>([["All", visibleTasks.length]]);
+   489→   489→    for (const c of TASK_CATEGORIES) counts.set(c, visibleTasks.filter((t) => t.category === c).length);
+   490→   490→    return counts;
+   491→   491→  }, [visibleTasks]);
+   492→   492→
+   493→   493→  const totalUpcoming = upcomingDays.reduce((sum, g) => sum + g.items.length, 0);
+   494→   494→  const showSkeletons = syncing && allTasks.length === 0;
+   495→   495→  const firstName = user.name.trim().split(/\s+/)[0] || "there";
+   496→   496→
+   497→   497→  return (
+   498→   498→    <div className="flex min-h-screen flex-col text-foreground">
+   499→   499→      {/* ── Header ─────────────────────────────────────────────────────────── */}
+   500→   500→      <header className="sticky top-0 z-40 border-b border-border/70 bg-background/75 backdrop-blur-xl">
+   501→   501→        <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
+   502→   502→          <Logo />
+   503→   503→          <div className="flex items-center gap-2 sm:gap-3">
+   504→   504→            {isDemo && (
+   505→   505→              <Badge variant="outline" className="gap-1.5 border-primary/40 bg-primary/10 text-primary">
+   506→   506→                <FlaskConical className="h-3 w-3" />
+   507→   507→                Demo
+   508→   508→              </Badge>
+   509→   509→            )}
+   510→   510→            <div className="flex items-center gap-2">
+   511→   511→              <Avatar className="h-8 w-8">
+   512→   512→                {user.picture ? <AvatarImage src={user.picture} alt={`${user.name}'s profile photo`} /> : null}
+   513→   513→                <AvatarFallback className="bg-secondary text-xs font-semibold">
+   514→   514→                  {initialsOf(user.name)}
+   515→   515→                </AvatarFallback>
+   516→   516→              </Avatar>
+   517→   517→              <div className="hidden min-w-0 sm:block">
+   518→   518→                <p className="truncate text-xs font-semibold leading-tight text-foreground">{user.name}</p>
+   519→   519→                <p className="truncate text-xs leading-tight text-muted-foreground">{user.email}</p>
+   520→   520→              </div>
+   521→   521→            </div>
+   522→   522→            <Button variant="outline" size="sm" onClick={() => void logout()} className="gap-1.5">
+   523→   523→              <LogOut className="h-3.5 w-3.5" />
+   524→   524→              <span className="hidden sm:inline">Logout</span>
+   525→   525→            </Button>
+   526→   526→          </div>
+   527→   527→        </div>
+   528→   528→      </header>
+   529→   529→
+   530→   530→      <main id="main" className="mx-auto w-full max-w-6xl flex-1 px-4 pb-14 pt-6 sm:px-6">
+   531→   531→        {/* ── Demo banner ──────────────────────────────────────────────────── */}
+   532→   532→        {isDemo && (
+   533→   533→          <div className="mb-5 flex flex-wrap items-center gap-2 rounded-2xl border border-primary/25 bg-primary/[0.06] px-4 py-3 text-sm shadow-soft">
+   534→   534→            <FlaskConical className="h-4 w-4 shrink-0 text-primary" />
+   535→   535→            <p className="text-muted-foreground">
+   536→   536→              <strong className="font-semibold text-primary">Demo Sandbox</strong> — simulated Debrecen
+   537→   537→              inbox. No Gmail account is connected;{" "}
+   538→   538→              <a href="/api/auth/google" className="text-primary underline underline-offset-4">
+   539→   539→                connect real Gmail
+   540→   540→              </a>{" "}
+   541→   541→              to run the live pipeline.
+   542→   542→            </p>
+   543→   543→          </div>
+   544→   544→        )}
+   545→   545→
+   546→   546→        {/* ── Section 1 · Today's Focus (morning briefing) ─────────────────── */}
+   547→   547→        <section
+   548→   548→          aria-label="Today's focus"
+   549→   549→          className="rounded-3xl border border-border/70 bg-card p-5 shadow-soft sm:p-7"
+   550→   550→        >
+   551→   551→          <div className="flex flex-wrap items-start justify-between gap-3">
+   552→   552→            <div>
+   553→   553→              <p className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.2em] text-primary">
+   554→   554→                <Sun className="h-3.5 w-3.5" aria-hidden="true" />
+   555→   555→                Today&apos;s Focus
+   556→   556→              </p>
+   557→   557→              <h1
+   558→   558→                suppressHydrationWarning
+   559→   559→                className="mt-2.5 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl"
+   560→   560→              >
+   561→   561→                {greetingOf(new Date())}, {firstName}.
+   562→   562→              </h1>
+   563→   563→              <p suppressHydrationWarning className="mt-1 text-sm text-muted-foreground">
+   564→   564→                {format(new Date(), "EEEE, MMM d")} — your focus today.
+   565→   565→              </p>
+   566→   566→            </div>
+   567→   567→            <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground">
+   568→   568→              {focusTasks.length} due today
+   569→   569→            </span>
+   570→   570→          </div>
+   571→   571→
+   572→   572→          {focusTasks.length > 0 ? (
+   573→   573→            <ul className="mt-5 space-y-2.5">
+   574→   574→              {focusTasks.map((t, i) => (
+   575→   575→                <TaskRow key={t.id} task={t} index={i} onDone={markTaskDone} />
+   576→   576→              ))}
+   577→   577→            </ul>
+   578→   578→          ) : nextTask ? (
+   579→   579→            <div className="mt-5 rounded-2xl border border-border/60 bg-muted/50 px-4 py-4 sm:px-5">
+   580→   580→              <p className="text-sm leading-relaxed text-muted-foreground">
+   581→   581→                Your schedule is clear today — here is your next upcoming deadline:
+   582→   582→              </p>
+   583→   583→              <ul className="mt-3">
+   584→   584→                <TaskRow task={nextTask} index={0} onDone={markTaskDone} highlight />
+   585→   585→              </ul>
+   586→   586→            </div>
+   587→   587→          ) : (
+   588→   588→            <div className="mt-5 flex flex-wrap items-center justify-center gap-3 rounded-2xl border border-dashed border-border/60 px-4 py-8 text-center">
+   589→   589→              <Sun className="h-5 w-5 shrink-0 text-primary/70" aria-hidden="true" />
+   590→   590→              <p className="text-sm text-muted-foreground">
+   591→   591→                Your schedule is clear today. Nothing is due — enjoy the calm.
+   592→   592→              </p>
+   593→   593→            </div>
+   594→   594→          )}
+   595→   595→        </section>
+   596→   596→
+   597→   597→        {/* ── Toolbar ──────────────────────────────────────────────────────── */}
+   598→   598→        <div className="mt-7 flex flex-wrap items-center gap-3">
+   599→   599→          <Button
+   600→   600→            onClick={() => void syncNow()}
+   601→   601→            disabled={syncing || (!isDemo && !connected)}
+   602→   602→            className="gap-2 font-semibold shadow-btn-accent"
+   603→   603→          >
+   604→   604→            {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+   605→   605→            Sync Gmail Now
+   606→   606→          </Button>
+   607→   607→          <span className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3.5 py-1.5 text-xs text-muted-foreground">
+   608→   608→            <span
+   609→   609→              suppressHydrationWarning
+   610→   610→              className={cn(
+   611→   611→                "h-2 w-2 rounded-full",
+   612→   612→                isDemo ? "bg-primary live-dot" : connected ? "bg-emerald-400" : "bg-zinc-500",
+   613→   613→              )}
+   614→   614→            />
+   615→   615→            {isDemo ? "Demo mode" : connected ? "Gmail connected" : "Gmail disconnected"}
+   616→   616→            {lastSync && (
+   617→   617→              <span suppressHydrationWarning className="text-muted-foreground/60">
+   618→   618→                · synced {format(lastSync, "HH:mm:ss")}
+   619→   619→              </span>
+   620→   620→            )}
+   621→   621→          </span>
+   622→   622→
+   623→   623→          <div className="ml-auto flex flex-wrap items-center gap-2">
+   624→   624→            <Sheet>
+   625→   625→              <SheetTrigger asChild>
+   626→   626→                <Button variant="outline" size="sm" className="gap-1.5">
+   627→   627→                  <MailWarning className="h-3.5 w-3.5" />
+   628→   628→                  Raw emails ({emails.length})
+   629→   629→                </Button>
+   630→   630→              </SheetTrigger>
+   631→   631→              <SheetContent side="right" className="w-full border-border bg-card shadow-lift sm:max-w-md">
+   632→   632→                <SheetHeader>
+   633→   633→                  <SheetTitle>Raw emails</SheetTitle>
+   634→   634→                  <SheetDescription>
+   635→   635→                    Last 30 days, academic, educational, immigration, health and professional mail only.
+   636→   636→                    Emails you already answered are skipped. Fetched live, never stored on servers.
+   637→   637→                  </SheetDescription>
+   638→   638→                </SheetHeader>
+   639→   639→                <div className="scrollbar-slim max-h-[calc(100vh-10rem)] space-y-3 overflow-y-auto px-4 pb-6">
+   640→   640→                  {emails.length === 0 && (
+   641→   641→                    <p className="py-8 text-center text-xs text-muted-foreground">
+   642→   642→                      No emails scanned yet — run a Gmail sync first.
+   643→   643→                    </p>
+   644→   644→                  )}
+   645→   645→                  {emails.map((e) => (
+   646→   646→                    <div key={e.id} className="rounded-xl border border-border/70 bg-muted/50 p-3">
+   647→   647→                      <p className="text-xs font-semibold leading-snug text-foreground">{e.subject}</p>
+   648→   648→                      <p className="mt-1 truncate text-xs text-muted-foreground">{e.from}</p>
+   649→   649→                      <p suppressHydrationWarning className="text-xs text-muted-foreground/70">
+   650→   650→                        {formatDue(e.date)}
+   651→   651→                      </p>
+   652→   652→                      <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-muted-foreground">
+   653→   653→                        {e.snippet}
+   654→   654→                      </p>
+   655→   655→                    </div>
+   656→   656→                  ))}
+   657→   657→                </div>
+   658→   658→              </SheetContent>
+   659→   659→            </Sheet>
+   660→   660→
+   661→   661→            <Dialog open={moodleOpen} onOpenChange={setMoodleOpen}>
+   662→   662→              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setMoodleOpen(true)}>
+   663→   663→                {moodleConnected ? (
+   664→   664→                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+   665→   665→                ) : (
+   666→   666→                  <CalendarDays className="h-3.5 w-3.5" />
+   667→   667→                )}
+   668→   668→                {moodleConnected ? "Moodle connected" : "Connect Moodle .ics"}
+   669→   669→              </Button>
+   670→   670→              <DialogContent className="border-border bg-card sm:max-w-md">
+   671→   671→                <DialogHeader>
+   672→   672→                  <DialogTitle>Connect Moodle calendar</DialogTitle>
+   673→   673→                  <DialogDescription>
+   674→   674→                    On elearning.unideb.hu go to Calendar → Export → Private address (.ics) and paste the
+   675→   675→                    URL here. It is stored only in this browser.
+   676→   676→                  </DialogDescription>
+   677→   677→                </DialogHeader>
+   678→   678→                <Input
+   679→   679→                  value={moodleUrl}
+   680→   680→                  onChange={(e) => setMoodleUrl(e.target.value)}
+   681→   681→                  placeholder="https://elearning.unideb.hu/calendar/export.php?..."
+   682→   682→                  className="border-input bg-background text-sm"
+   683→   683→                  aria-label="Moodle .ics calendar URL"
+   684→   684→                />
+   685→   685→                <DialogFooter>
+   686→   686→                  <Button
+   687→   687→                    onClick={() => void connectMoodle(moodleUrl)}
+   688→   688→                    disabled={moodleConnecting || !moodleUrl.trim()}
+   689→   689→                    className="gap-2 font-semibold"
+   690→   690→                  >
+   691→   691→                    {moodleConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+   692→   692→                    Connect
+   693→   693→                  </Button>
+   694→   694→                </DialogFooter>
+   695→   695→              </DialogContent>
+   696→   696→            </Dialog>
+   697→   697→          </div>
+   698→   698→        </div>
+   699→   699→
+   700→   700→        {/* ── Conflict radar ───────────────────────────────────────────────── */}
+   701→   701→        {conflicts.length > 0 && (
+   702→   702→          <div className="mt-5 space-y-2" role="alert" aria-label="Deadline conflicts">
+   703→   703→            {conflicts.map((c) => (
+   704→   704→              <div
+   705→   705→                key={c.dateKey}
+   706→   706→                className="flex items-start gap-3 rounded-2xl border border-amber-400/30 bg-amber-400/[0.08] px-4 py-3 shadow-soft"
+   707→   707→              >
+   708→   708→                <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-amber-400 live-dot-amber" />
+   709→   709→                <div className="text-sm leading-relaxed">
+   710→   710→                  <span className="font-semibold text-amber-300">
+   711→   711→                    {c.tasks.length} deadlines collide on {c.dateLabel}.
+   712→   712→                  </span>{" "}
+   713→   713→                  <span className="text-muted-foreground">{c.tasks.map((t) => t.title).join(" · ")}</span>
+   714→   714→                </div>
+   715→   715→              </div>
+   716→   716→            ))}
+   717→   717→          </div>
+   718→   718→        )}
+   719→   719→
+   720→   720→        {/* ── Category filter chips ────────────────────────────────────────── */}
+   721→   721→        <div className="mt-5 flex flex-wrap gap-2" role="group" aria-label="Filter tasks by category">
+   722→   722→          {(["All", ...TASK_CATEGORIES] as const).map((c) => (
+   723→   723→            <button
+   724→   724→              key={c}
+   725→   725→              type="button"
+   726→   726→              onClick={() => setFilter(c)}
+   727→   727→              aria-pressed={filter === c}
+   728→   728→              className={cn(
+   729→   729→                "min-h-11 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-all duration-300 ease-base",
+   730→   730→                filter === c
+   731→   731→                  ? "border-transparent bg-primary text-primary-foreground shadow-btn-accent"
+   732→   732→                  : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground",
+   733→   733→              )}
+   734→   734→            >
+   735→   735→              {c}
+   736→   736→              <span className={cn("ml-1.5", filter === c ? "text-primary-foreground/70" : "text-muted-foreground/60")}>
+   737→   737→                {categoryCounts.get(c) ?? 0}
+   738→   738→              </span>
+   739→   739→            </button>
+   740→   740→          ))}
+   741→   741→        </div>
+   742→   742→
+   743→   743→        {/* ── Section 2 · Upcoming Schedule + sidebar ──────────────────────── */}
+   744→   744→        <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
+   745→   745→          <section aria-label="Upcoming schedule">
+   746→   746→            {showSkeletons ? (
+   747→   747→              <div className="space-y-3">
+   748→   748→                {Array.from({ length: 5 }).map((_, i) => (
+   749→   749→                  <Skeleton key={i} className="h-[72px] rounded-2xl bg-card" />
+   750→   750→                ))}
+   751→   751→              </div>
+   752→   752→            ) : visibleTasks.length === 0 ? (
+   753→   753→              <Card className="rounded-2xl border-dashed border-border bg-card/70 shadow-soft">
+   754→   754→                <CardContent className="flex flex-col items-center gap-3 py-14 text-center">
+   755→   755→                  <Inbox className="h-8 w-8 text-muted-foreground/60" />
+   756→   756→                  <p className="text-sm font-semibold text-foreground">
+   757→   757→                    {connected || isDemo ? "No deadlines detected yet" : "Gmail not connected"}
+   758→   758→                  </p>
+   759→   759→                  <p className="max-w-sm text-xs leading-relaxed text-muted-foreground">
+   760→   760→                    {connected || isDemo
+   761→   761→                      ? "Hit “Sync Gmail Now” — SyncMe scans your last 30 days of university email and pulls out exams, quizzes, appointments and immigration letters. Expired, personal and junk mail is excluded automatically. Tasks stay on this dashboard between syncs."
+   762→   762→                      : "Reconnect your Google account to start scanning your inbox for deadlines again. No consent screen needed."}
+   763→   763→                  </p>
+   764→   764→                  {!connected && !isDemo && (
+   765→   765→                    <Button asChild className="mt-1 gap-2 font-semibold">
+   766→   766→                      <a href="/api/auth/google">Reconnect Gmail</a>
+   767→   767→                    </Button>
+   768→   768→                  )}
+   769→   769→                </CardContent>
+   770→   770→              </Card>
+   771→   771→            ) : (
+   772→   772→              <div>
+   773→   773→                <div className="mb-4 flex items-center gap-2 border-b border-border/60 pb-2.5">
+   774→   774→                  <CalendarDays className="h-4 w-4 text-primary" aria-hidden="true" />
+   775→   775→                  <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
+   776→   776→                    Upcoming Schedule
+   777→   777→                  </h2>
+   778→   778→                  <span className="hidden text-xs text-muted-foreground/60 sm:inline">— earliest first</span>
+   779→   779→                  <span className="ml-auto rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-semibold text-muted-foreground">
+   780→   780→                    {totalUpcoming}
+   781→   781→                  </span>
+   782→   782→                </div>
+   783→   783→
+   784→   784→                {upcomingDays.length === 0 ? (
+   785→   785→                  <p className="py-6 text-xs leading-relaxed text-muted-foreground">
+   786→   786→                    Nothing scheduled after today — everything due is already in Today&apos;s Focus above.
+   787→   787→                  </p>
+   788→   788→                ) : (
+   789→   789→                  <div className="space-y-7">
+   790→   790→                    {upcomingDays.map((group) => {
+   791→   791→                      const label = group.key === "undated" ? "No date yet — check soon" : dayLabel(group.key, todayKey);
+   792→   792→                      return (
+   793→   793→                        <div
+   794→   794→                          key={group.key}
+   795→   795→                          aria-label={`${label} — ${group.items.length} task${group.items.length === 1 ? "" : "s"}`}
+   796→   796→                        >
+   797→   797→                          <div className="mb-2.5 flex items-center gap-2">
+   798→   798→                            <h3 className="text-sm font-semibold text-foreground">{label}</h3>
+   799→   799→                            <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+   800→   800→                              {group.items.length}
+   801→   801→                            </span>
+   802→   802→                            <span className="h-px flex-1 bg-border/60" aria-hidden="true" />
+   803→   803→                          </div>
+   804→   804→                          <ul className="space-y-2.5">
+   805→   805→                            {group.items.map((t, i) => (
+   806→   806→                              <TaskRow key={t.id} task={t} index={i} onDone={markTaskDone} />
+   807→   807→                            ))}
+   808→   808→                          </ul>
+   809→   809→                        </div>
+   810→   810→                      );
+   811→   811→                    })}
+   812→   812→                  </div>
+   813→   813→                )}
+   814→   814→              </div>
+   815→   815→            )}
+   816→   816→          </section>
+   817→   817→
+   818→   818→          <aside className="space-y-4" aria-label="Sync status">
+   819→   819→            <Card className="rounded-2xl border-border/70 bg-card shadow-soft">
+   820→   820→              <CardHeader className="pb-3">
+   821→   821→                <CardTitle className="text-sm">Sync status</CardTitle>
+   822→   822→                <CardDescription className="text-xs">Auto-refreshes every 30 seconds.</CardDescription>
+   823→   823→              </CardHeader>
+   824→   824→              <CardContent className="space-y-2.5 text-xs">
+   825→   825→                <div className="flex items-center justify-between">
+   826→   826→                  <span className="text-muted-foreground">Gmail</span>
+   827→   827→                  <span
+   828→   828→                    className={cn(
+   829→   829→                      "inline-flex items-center gap-1.5 font-medium",
+   830→   830→                      connected || isDemo ? "text-emerald-400" : "text-rose-400",
+   831→   831→                    )}
+   832→   832→                  >
+   833→   833→                    {(connected || isDemo) && <CheckCircle2 className="h-3.5 w-3.5" />}
+   834→   834→                    {isDemo ? "Simulated" : connected ? "Connected" : "Disconnected"}
+   835→   835→                  </span>
+   836→   836→                </div>
+   837→   837→                {!isDemo && (
+   838→   838→                  <p className="truncate text-xs text-muted-foreground/70" title={user.email}>
+   839→   839→                    {user.email}
+   840→   840→                  </p>
+   841→   841→                )}
+   842→   842→                {!isDemo && !connected && (
+   843→   843→                  <Button asChild size="sm" className="w-full gap-1.5 font-semibold">
+   844→   844→                    <a href="/api/auth/google">Reconnect Gmail</a>
+   845→   845→                  </Button>
+   846→   846→                )}
+   847→   847→                <div className="flex items-center justify-between">
+   848→   848→                  <span className="text-muted-foreground">Moodle</span>
+   849→   849→                  <span
+   850→   850→                    className={cn(
+   851→   851→                      "inline-flex items-center gap-1.5 font-medium",
+   852→   852→                      moodleConnected ? "text-emerald-400" : "text-muted-foreground",
+   853→   853→                    )}
+   854→   854→                  >
+   855→   855→                    {moodleConnected && <CheckCircle2 className="h-3.5 w-3.5" />}
+   856→   856→                    {moodleConnected ? `Connected · ${moodleTasks.length} events` : "Not connected"}
+   857→   857→                  </span>
+   858→   858→                </div>
+   859→   859→                <div className="flex items-center justify-between">
+   860→   860→                  <span className="text-muted-foreground">Extractor</span>
+   861→   861→                  <span className="font-medium text-foreground">
+   862→   862→                    {isDemo
+   863→   863→                      ? "Demo data"
+   864→   864→                      : engine === "gemini"
+   865→   865→                        ? "Gemini"
+   866→   866→                        : engine === "zai"
+   867→   867→                          ? "GLM"
+   868→   868→                          : engine === "rule"
+   869→   869→                            ? "Rule engine"
+   870→   870→                            : "—"}
+   871→   871→                  </span>
+   872→   872→                </div>
+   873→   873→                <div className="flex items-center justify-between">
+   874→   874→                  <span className="text-muted-foreground">Last sync</span>
+   875→   875→                  <span suppressHydrationWarning className="font-medium text-foreground">
+   876→   876→                    {lastSync ? format(lastSync, "HH:mm:ss") : "—"}
+   877→   877→                  </span>
+   878→   878→                </div>
+   879→   879→              </CardContent>
+   880→   880→            </Card>
+   881→   881→
+   882→   882→            <Card className="rounded-2xl border-border/70 bg-card shadow-soft">
+   883→   883→              <CardHeader className="pb-3">
+   884→   884→                <CardTitle className="text-sm">Moodle feed</CardTitle>
+   885→   885→              </CardHeader>
+   886→   886→              <CardContent className="space-y-2 text-xs">
+   887→   887→                <p className="break-all text-muted-foreground">
+   888→   888→                  {moodleConnected
+   889→   889→                    ? "Connected via your private .ics URL (stored in this browser only)."
+   890→   890→                    : "Paste your elearning.unideb.hu private .ics export URL to pull quiz and assignment deadlines."}
+   891→   891→                </p>
+   892→   892→                <Button variant="outline" size="sm" className="w-full gap-1.5" onClick={() => setMoodleOpen(true)}>
+   893→   893→                  <CalendarDays className="h-3.5 w-3.5" />
+   894→   894→                  {moodleConnected ? "Update feed URL" : "Connect .ics feed"}
+   895→   895→                </Button>
+   896→   896→              </CardContent>
+   897→   897→            </Card>
+   898→   898→
+   899→   899→            <Card className="rounded-2xl border-border/70 bg-card shadow-soft">
+   900→   900→              <CardHeader className="pb-3">
+   901→   901→                <CardTitle className="flex items-center gap-2 text-sm">
+   902→   902→                  <ShieldCheck className="h-4 w-4 text-primary" />
+   903→   903→                  Read-only &amp; zero storage
+   904→   904→                </CardTitle>
+   905→   905→              </CardHeader>
+   906→   906→              <CardContent className="text-xs leading-relaxed text-muted-foreground">
+   907→   907→                SyncMe uses <code className="text-foreground">gmail.readonly</code> solely to extract student
+   908→   908→                deadlines. Emails are fetched on demand and never stored or sold.{" "}
+   909→   909→                <a href="/privacy" className="text-primary underline underline-offset-4">
+   910→   910→                  Privacy Policy
+   911→   911→                </a>
+   912→   912→              </CardContent>
+   913→   913→            </Card>
+   914→   914→          </aside>
+   915→   915→        </div>
+   916→   916→      </main>
+   917→   917→
+   918→   918→      <SiteFooter />
+   919→   919→    </div>
+   920→   920→  );
+   921→   921→}
+   922→   922→
