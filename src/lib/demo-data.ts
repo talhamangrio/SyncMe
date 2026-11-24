@@ -212,3 +212,27 @@ export const DEMO_DONE: { id: string; at: string }[] = [
   { id: "demo-done-lab-report", at: new Date(Date.now() - 2 * 86_400_000).toISOString() },
   { id: "demo-done-tuition", at: new Date(Date.now() - 5 * 86_400_000).toISOString() },
 ];
+
+/** Full completed task objects so the demo "Done" view has real rows to show. */
+export const DEMO_DONE_TASKS: SyncTask[] = [
+  {
+    id: "demo-done-lab-report",
+    title: "Submit Biochemistry lab report",
+    category: "Neptun",
+    dueDate: toBudapestIso(inDaysAt(-2, 14, 0)),
+    priority: "Medium",
+    actionSummary: "Upload the practical report PDF to the Neptun course page.",
+    sourceEmailSubject: "MBVB13003 Lab report submission confirmed",
+    source: "Gmail",
+  },
+  {
+    id: "demo-done-tuition",
+    title: "Pay autumn tuition fee instalment",
+    category: "Neptun",
+    dueDate: toBudapestIso(inDaysAt(-5, 9, 0)),
+    priority: "High",
+    actionSummary: "Settle the instalment via bank transfer and keep the receipt.",
+    sourceEmailSubject: "Tuition fee payment reminder - autumn semester",
+    source: "Gmail",
+  },
+];

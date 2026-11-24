@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { toast } from "sonner";
 import {
   ArrowsClockwise,
+  ArrowLeft,
   CheckCircle,
   Flask,
   List,
@@ -13,6 +14,7 @@ import {
   SignOut,
   WarningCircle,
 } from "@phosphor-icons/react/dist/ssr";
+import type { Icon } from "@phosphor-icons/react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -24,15 +26,15 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { CATEGORY_ICONS, ConflictGroup, TaskCard, formatTaskDue } from "@/components/dashboard/task-card";
+import { CATEGORY_ICONS, ConflictGroup, DoneTaskRow, TaskCard, formatTaskDue } from "@/components/dashboard/task-card";
 import { Logo } from "@/components/logo";
 import { SiteFooter } from "@/components/site-footer";
 import { BASE_CURVE } from "@/components/landing/reveal";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { DEMO_DONE, DEMO_EMAILS, DEMO_TASKS } from "@/lib/demo-data";
-import { addDaysKey, budapestTodayKey, dayKeyOf, normalizeDueDate, sortChronologically } from "@/lib/dates";
+import { DEMO_DONE, DEMO_DONE_TASKS, DEMO_EMAILS, DEMO_TASKS } from "@/lib/demo-data";
+import { addDaysKey, budapestTodayKey, dayKeyOf, sortChronologically } from "@/lib/dates";
 import type { GmailSyncResponse, MoodleSyncResponse, RawEmail, SyncMeUser, SyncTask, TaskCategory } from "@/lib/types";
-import { PRIORITY_UI, TASK_CATEGORIES } from "@/lib/types";
+import { CATEGORY_UI, TASK_CATEGORIES } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const POLL_INTERVAL_MS = 30_000;
@@ -44,6 +46,29 @@ const EMAILS_KEY = "syncme_emails_v1";
 const DONE_KEY = "syncme_done_v1";
 /** When each task was marked done (powers the "Done this week" tile). */
 const DONE_AT_KEY = "syncme_done_at_v1";
+/** Full completed task snapshots so the Done view can list and restore them. */
+const DONE_TASKS_KEY = "syncme_done_tasks_v1";
+
+/** Which list the main task area shows: the day-by-day schedule or completed tasks. */
+type DashboardView = "upcoming" | "done";
+
+/** A completed task snapshot plus the feed it came from (needed to restore it). */
+interface DoneEntry {
+  task: SyncTask;
+  origin: "gmail" | "moodle";
+}
+
+/** One summary tile in the top grid; clickable tiles switch the list view. */
+interface SummaryTile {
+  label: string;
+  value: number;
+  icon: Icon | null;
+  iconClass: string;
+  onClick: (() => void) | null;
+  selected: boolean;
+  /** Small hint rendered under the value, e.g. "View done →". */
+  hint: string | null;
+}
 
 function loadJson<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -93,12 +118,6 @@ function mergeEmails(prev: RawEmail[], next: RawEmail[]): RawEmail[] {
   return [...byId.values()].sort((a, b) => Date.parse(b.date) - Date.parse(a.date)).slice(0, 50);
 }
 
-/** Sort key: normalized Budapest ISO parsed as ms; undated tasks sink to the end. */
-function dueMsOf(task: SyncTask): number {
-  const normalized = normalizeDueDate(task.dueDate);
-  return normalized === "unknown" ? Number.POSITIVE_INFINITY : Date.parse(normalized);
-}
-
 function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/);
   const chars = parts.map((p) => p[0]?.toUpperCase() ?? "").join("");
@@ -135,11 +154,11 @@ function TaskRowSkeleton() {
       <span className="skeleton-soft h-5 w-5 shrink-0 rounded-full bg-alt" />
       <span className="skeleton-soft h-7 w-7 shrink-0 rounded-lg bg-alt" />
       <div className="min-w-0 flex-1 space-y-1.5">
-        <span className="skeleton-soft block h-4 w-1/3 rounded bg-alt" />
-        <span className="skeleton-soft block h-3 w-2/3 rounded bg-alt" />
+        <span className="skeleton-soft block h-4 w-3/5 rounded bg-alt" />
+        <span className="skeleton-soft block h-3 w-full rounded bg-alt" />
+        <span className="skeleton-soft block h-3 w-28 rounded bg-alt sm:hidden" />
       </div>
       <span className="skeleton-soft hidden h-3 w-24 shrink-0 rounded bg-alt sm:block" />
-      <span className="skeleton-soft h-5 w-14 shrink-0 rounded-full bg-alt" />
     </div>
   );
 }
@@ -185,6 +204,8 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
   const [engine, setEngine] = useState<"gemini" | "zai" | "rule" | null>(null);
   const [doneIds, setDoneIds] = useState<Set<string>>(new Set());
   const [doneAt, setDoneAt] = useState<Record<string, string>>({});
+  const [doneTasks, setDoneTasks] = useState<Record<string, DoneEntry>>({});
+  const [view, setView] = useState<DashboardView>("upcoming");
   const [moodleConnected, setMoodleConnected] = useState(false);
   const [filter, setFilter] = useState<"All" | TaskCategory>("All");
   const [moodleUrl, setMoodleUrl] = useState("");
@@ -222,6 +243,13 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
   useEffect(() => {
     if (isDemo) {
       setDoneAt(Object.fromEntries(DEMO_DONE.map((d) => [d.id, d.at])));
+      setDoneTasks(
+        Object.fromEntries(
+          DEMO_DONE_TASKS.map(
+            (t): [string, DoneEntry] => [t.id, { task: t, origin: t.source === "Moodle" ? "moodle" : "gmail" }],
+          ),
+        ),
+      );
       return;
     }
     const savedTasks = loadJson<SyncTask[]>(GMAIL_TASKS_KEY, []);
@@ -235,6 +263,15 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
     doneRef.current = ids;
     setDoneIds(ids);
     setDoneAt(mergedDoneAt);
+    const savedDoneTasks = loadJson<Record<string, DoneEntry>>(DONE_TASKS_KEY, {});
+    // Keep only the last 30 days of completed snapshots — the Done list never piles up.
+    const monthCutoff = Date.now() - 30 * 86_400_000;
+    const liveDoneTasks: Record<string, DoneEntry> = {};
+    for (const [id, entry] of Object.entries(savedDoneTasks)) {
+      const at = mergedDoneAt[id];
+      if (!at || Date.parse(at) > monthCutoff) liveDoneTasks[id] = entry;
+    }
+    setDoneTasks(liveDoneTasks);
     setGmailTasks((prev) => (prev.length === 0 ? tagSource(savedTasks, "Gmail") : prev));
     setMoodleTasks((prev) => (prev.length === 0 ? tagSource(savedMoodle, "Moodle") : prev));
     setEmails((prev) => (prev.length === 0 ? savedEmails : prev));
@@ -257,6 +294,9 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
   useEffect(() => {
     if (!isDemo) saveJson(DONE_AT_KEY, doneAt);
   }, [doneAt, isDemo]);
+  useEffect(() => {
+    if (!isDemo) saveJson(DONE_TASKS_KEY, doneTasks);
+  }, [doneTasks, isDemo]);
 
   // ── Gmail sync (also runs on load and polls every 30s) ────────────────────
   const syncNow = useCallback(
@@ -381,6 +421,7 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
       doneRef.current = nextDone;
       setDoneIds(nextDone);
       setDoneAt((prev) => ({ ...prev, [task.id]: new Date().toISOString() }));
+      setDoneTasks((prev) => ({ ...prev, [task.id]: { task, origin } }));
       setGmailTasks((prev) => prev.filter((t) => t.id !== task.id));
       setMoodleTasks((prev) => prev.filter((t) => t.id !== task.id));
       if (drawerTask?.id === task.id) setDrawerTask(null);
@@ -392,11 +433,12 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
     [moodleTasks, drawerTask],
   );
 
-  const undoDone = useCallback(() => {
-    const entry = lastDoneRef.current;
-    if (!entry) return;
-    const { task, origin } = entry;
-    lastDoneRef.current = null;
+  /**
+   * Restore a completed task: uncheck it from the Done view, drop it from the
+   * done bookkeeping and slide it straight back into its chronological day
+   * group on the feed it came from.
+   */
+  const restoreTask = useCallback((task: SyncTask, origin: "gmail" | "moodle") => {
     const nextDone = new Set(doneRef.current);
     nextDone.delete(task.id);
     doneRef.current = nextDone;
@@ -406,11 +448,23 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
       delete copy[task.id];
       return copy;
     });
+    setDoneTasks((prev) => {
+      const copy = { ...prev };
+      delete copy[task.id];
+      return copy;
+    });
     const restore = (prev: SyncTask[]) => sortChronologically([task, ...prev.filter((t) => t.id !== task.id)]);
     if (origin === "moodle") setMoodleTasks(restore);
     else setGmailTasks(restore);
-    toast.success("Task restored", { description: `"${task.title}" is back on your dashboard.` });
+    toast.success("Task restored to schedule");
   }, []);
+
+  const undoDone = useCallback(() => {
+    const entry = lastDoneRef.current;
+    if (!entry) return;
+    lastDoneRef.current = null;
+    restoreTask(entry.task, entry.origin);
+  }, [restoreTask]);
 
   const startComplete = useCallback(
     (task: SyncTask) => {
@@ -446,42 +500,39 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
   );
 
   /**
-   * Date groups: Overdue (past due and not done), Today, Tomorrow, This week
-   * (within 7 days), Later (beyond 7 days, undated tasks sink here). Each
-   * group is strictly ascending by date and time.
+   * Strict day-by-day groups in ascending calendar order — no vague multi-day
+   * buckets. Every date with tasks gets its own header: TODAY · Tue 24 Nov,
+   * TOMORROW · Wed 25 Nov, then exact THU 26 NOV style headers. Past days
+   * surface as OVERDUE · <date>; undated tasks sink into a trailing group.
    */
   const dateGroups = useMemo(() => {
     const tomorrowKey = addDaysKey(todayKey, 1);
-    const weekEndKey = addDaysKey(todayKey, 7);
-    const overdue: SyncTask[] = [];
-    const today: SyncTask[] = [];
-    const tomorrow: SyncTask[] = [];
-    const week: SyncTask[] = [];
-    const later: SyncTask[] = [];
+    const byDay = new Map<string, SyncTask[]>();
     const undated: SyncTask[] = [];
     for (const t of filteredTasks) {
-      const normalized = normalizeDueDate(t.dueDate);
-      if (normalized === "unknown") {
+      const day = dayKeyOf(t.dueDate);
+      if (day === null) {
         undated.push(t);
         continue;
       }
-      const day = normalized.slice(0, 10);
-      const ms = Date.parse(normalized);
-      if (day < todayKey || (day === todayKey && ms <= Date.now())) overdue.push(t);
-      else if (day === todayKey) today.push(t);
-      else if (day === tomorrowKey) tomorrow.push(t);
-      else if (day <= weekEndKey) week.push(t);
-      else later.push(t);
+      const bucket = byDay.get(day);
+      if (bucket) bucket.push(t);
+      else byDay.set(day, [t]);
     }
-    const byTime = (a: SyncTask, b: SyncTask) => dueMsOf(a) - dueMsOf(b);
-    const groups: { key: string; label: string; items: SyncTask[] }[] = [
-      { key: "overdue", label: "Overdue", items: [...overdue].sort(byTime) },
-      { key: "today", label: "Today", items: [...today].sort(byTime) },
-      { key: "tomorrow", label: "Tomorrow", items: [...tomorrow].sort(byTime) },
-      { key: "week", label: "This week", items: [...week].sort(byTime) },
-      { key: "later", label: "Later", items: [...later].sort(byTime).concat(undated) },
-    ];
-    return groups.filter((g) => g.items.length > 0);
+    const groups: { key: string; day: string | null; label: string; items: SyncTask[] }[] = [];
+    for (const day of [...byDay.keys()].sort((a, b) => a.localeCompare(b))) {
+      const noon = new Date(`${day}T12:00:00`);
+      let label: string;
+      if (day < todayKey) label = `OVERDUE · ${format(noon, "EEE d MMM")}`;
+      else if (day === todayKey) label = `TODAY · ${format(noon, "EEE d MMM")}`;
+      else if (day === tomorrowKey) label = `TOMORROW · ${format(noon, "EEE d MMM")}`;
+      else label = format(noon, "EEE d MMM").toUpperCase();
+      groups.push({ key: day, day, label, items: sortChronologically(byDay.get(day) ?? []) });
+    }
+    if (undated.length > 0) {
+      groups.push({ key: "undated", day: null, label: "NO DUE DATE", items: sortChronologically(undated) });
+    }
+    return groups;
   }, [filteredTasks, todayKey]);
 
   /** Days holding two or more deadlines — rendered as amber conflict groups. */
@@ -520,15 +571,62 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
     return Object.values(doneAt).filter((at) => Date.parse(at) > cutoff).length;
   }, [doneAt]);
 
+  /** Completed task snapshots, most recently done first — powers the Done view. */
+  const doneEntries = useMemo(() => {
+    return Object.values(doneTasks)
+      .map((entry) => ({ ...entry, at: doneAt[entry.task.id] ?? "" }))
+      .sort((a, b) => (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0));
+  }, [doneTasks, doneAt]);
+
   const categoryCounts = useMemo(() => {
     const counts = new Map<string, number>([["All", allTasks.length]]);
     for (const c of TASK_CATEGORIES) counts.set(c, allTasks.filter((t) => t.category === c).length);
     return counts;
   }, [allTasks]);
 
-  const showSkeletons = syncing && allTasks.length === 0;
+  const showSkeletons = syncing && allTasks.length === 0 && view === "upcoming";
   const firstName = user.name.trim().split(/\s+/)[0] || "there";
   const weekTotal = dueTodayCount + next7Count;
+
+  /** Summary tiles — "Due today"/"Next 7 days" return to the schedule, "Done" opens the completed view. */
+  const summaryTiles: SummaryTile[] = [
+    {
+      label: "Due today",
+      value: dueTodayCount,
+      icon: null,
+      iconClass: "",
+      onClick: () => setView("upcoming"),
+      selected: false,
+      hint: null,
+    },
+    {
+      label: "Next 7 days",
+      value: next7Count,
+      icon: null,
+      iconClass: "",
+      onClick: () => setView("upcoming"),
+      selected: false,
+      hint: null,
+    },
+    {
+      label: "Conflicts",
+      value: conflictMap.size,
+      icon: WarningCircle,
+      iconClass: "text-status-warn",
+      onClick: null,
+      selected: false,
+      hint: null,
+    },
+    {
+      label: "Done this week",
+      value: doneThisWeek,
+      icon: CheckCircle,
+      iconClass: "text-cat-medical",
+      onClick: () => setView(view === "done" ? "upcoming" : "done"),
+      selected: view === "done",
+      hint: view === "done" ? "Viewing" : "View done →",
+    },
+  ];
 
   const FILTERS = useMemo(() => ["All", ...TASK_CATEGORIES] as const, []);
 
@@ -549,48 +647,29 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
     moodleInputRef.current?.focus();
   };
 
-  /** Renders a group's rows, wrapping consecutive same day pairs in a conflict container. */
-  const renderGroupItems = (items: SyncTask[]): React.ReactNode[] => {
-    const runs: { day: string | null; items: SyncTask[] }[] = [];
-    for (const t of items) {
-      const day = dayKeyOf(t.dueDate);
-      const last = runs[runs.length - 1];
-      if (last && last.day === day) last.items.push(t);
-      else runs.push({ day, items: [t] });
+  /** Renders one day group's rows, wrapping same-day clusters in a conflict container. */
+  const renderGroupItems = (group: { day: string | null; items: SyncTask[] }): React.ReactNode => {
+    const { day, items } = group;
+    const rows = items.map((t, j) => (
+      <TaskRow
+        key={t.id}
+        task={t}
+        index={j}
+        completing={completingIds.has(t.id)}
+        onOpen={setDrawerTask}
+        onToggleDone={startComplete}
+      />
+    ));
+    // Two or more deadlines sharing the day → wrap them in the amber conflict container.
+    if (day !== null && items.length >= 2 && conflictMap.has(day)) {
+      const label = format(new Date(`${day}T12:00:00`), "EEEE d MMM");
+      return (
+        <ConflictGroup key={day} dateLabel={label} count={items.length}>
+          {rows}
+        </ConflictGroup>
+      );
     }
-    let cursor = 0;
-    return runs.map((run, runIndex) => {
-      const start = cursor;
-      cursor += run.items.length;
-      const conflicted = run.day !== null && run.items.length >= 2 && conflictMap.has(run.day);
-      if (conflicted && run.day) {
-        const label = format(new Date(`${run.day}T12:00:00`), "EEEE d MMM");
-        return (
-          <ConflictGroup key={run.day} dateLabel={label} count={run.items.length}>
-            {run.items.map((t, j) => (
-              <TaskRow
-                key={t.id}
-                task={t}
-                index={start + j}
-                completing={completingIds.has(t.id)}
-                onOpen={setDrawerTask}
-                onToggleDone={startComplete}
-              />
-            ))}
-          </ConflictGroup>
-        );
-      }
-      return run.items.map((t, j) => (
-        <TaskRow
-          key={t.id}
-          task={t}
-          index={start + j}
-          completing={completingIds.has(t.id)}
-          onOpen={setDrawerTask}
-          onToggleDone={startComplete}
-        />
-      ));
-    });
+    return rows;
   };
 
   return (
@@ -701,27 +780,52 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
 
         {/* ── Summary tiles ────────────────────────────────────────────────── */}
         <div className="mt-8 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-          {[
-            { label: "Due today", value: dueTodayCount, icon: null, iconClass: "" },
-            { label: "Next 7 days", value: next7Count, icon: null, iconClass: "" },
-            { label: "Conflicts", value: conflictMap.size, icon: WarningCircle, iconClass: "text-status-warn" },
-            { label: "Done this week", value: doneThisWeek, icon: CheckCircle, iconClass: "text-cat-medical" },
-          ].map((tile) => (
-            <div key={tile.label} className="rounded-2xl border border-border bg-white p-4">
-              <p className="caption-1 inline-flex items-center gap-1.5 text-ink-3">
-                {tile.icon && <tile.icon className={cn("h-4 w-4", tile.iconClass)} aria-hidden="true" />}
-                {tile.label}
-              </p>
-              <p suppressHydrationWarning className="mt-2 font-mono text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
-                {tile.value}
-              </p>
-            </div>
-          ))}
+          {summaryTiles.map((tile) => {
+            const interactive = tile.onClick !== null;
+            return (
+              <div
+                key={tile.label}
+                role={interactive ? "button" : undefined}
+                tabIndex={interactive ? 0 : undefined}
+                onClick={tile.onClick ?? undefined}
+                onKeyDown={
+                  interactive
+                    ? (e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          tile.onClick?.();
+                        }
+                      }
+                    : undefined
+                }
+                aria-pressed={interactive ? tile.selected : undefined}
+                className={cn(
+                  "rounded-2xl border bg-white p-4 text-left transition-[border-color,box-shadow] duration-200 ease-base",
+                  tile.selected
+                    ? "border-brand ring-2 ring-brand/20"
+                    : interactive
+                      ? "cursor-pointer border-border hover:border-brand hover:shadow-xs focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+                      : "border-border",
+                )}
+              >
+                <p className="caption-1 inline-flex items-center gap-1.5 text-ink-3">
+                  {tile.icon && <tile.icon className={cn("h-4 w-4", tile.iconClass)} aria-hidden="true" />}
+                  {tile.label}
+                </p>
+                <p suppressHydrationWarning className="mt-2 font-mono text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
+                  {tile.value}
+                </p>
+                {tile.hint ? <p className="mt-1 text-xs font-medium leading-4 text-brand">{tile.hint}</p> : null}
+              </div>
+            );
+          })}
         </div>
 
         {/* ── Main column + right rail ─────────────────────────────────────── */}
         <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div className="space-y-6 lg:col-span-2">
+            {view === "upcoming" ? (
+              <>
             {/* ── Segmented pill filter bar ─────────────────────────────────── */}
             <div
               role="group"
@@ -789,18 +893,75 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
                 <div className="space-y-8">
                   {dateGroups.map((group) => (
                     <div key={group.key}>
-                      <div className="sticky top-[72px] z-20 -mx-4 mb-2 flex items-center gap-2 border-b border-border bg-page/85 px-4 pb-1.5 backdrop-blur-sm sm:-mx-6 sm:px-6">
-                        <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-3">{group.label}</h3>
+                      <div className="sticky top-[72px] z-20 -mx-4 mb-2 flex items-center justify-between gap-2 border-b border-border bg-page/85 px-4 pb-1.5 backdrop-blur-sm sm:-mx-6 sm:px-6">
+                        <h3 className="text-xs font-semibold tracking-wider text-ink-3">{group.label}</h3>
                         <span className="rounded-full bg-alt px-2 py-0.5 text-xs leading-4 text-ink-3">
                           {group.items.length}
                         </span>
                       </div>
-                      <ul className="space-y-2">{renderGroupItems(group.items)}</ul>
+                      <ul className="space-y-2">{renderGroupItems(group)}</ul>
                     </div>
                   ))}
                 </div>
               )}
             </section>
+              </>
+            ) : (
+              /* ── Completed tasks view (opened from the "Done this week" tile) ── */
+              <section aria-label="Completed tasks" className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-white p-4">
+                  <h2 className="title-2 text-ink">
+                    Completed tasks <span className="font-mono text-ink-3">({doneEntries.length})</span>
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => setView("upcoming")}
+                    className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-2 button-md text-ink btn-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+                  >
+                    <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+                    Back to upcoming
+                  </button>
+                </div>
+                {doneEntries.length === 0 ? (
+                  <div className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-white px-4 py-12 text-center">
+                    <span
+                      aria-hidden="true"
+                      className="flex h-12 w-12 items-center justify-center rounded-full bg-alt text-ink-3"
+                    >
+                      <CheckCircle className="h-6 w-6" />
+                    </span>
+                    <h3 className="title-1 text-ink">No completed tasks yet</h3>
+                    <p className="body-3 max-w-sm text-ink-3">
+                      Check off a task and it will appear here — uncheck it any time to put it back on your schedule.
+                    </p>
+                  </div>
+                ) : (
+                  <ul className="space-y-2">
+                    {doneEntries.map((entry, i) => (
+                      <motion.li
+                        key={entry.task.id}
+                        layout
+                        initial={{ opacity: 0, y: 16 }}
+                        animate={{ opacity: 1, x: 0, y: 0 }}
+                        transition={{
+                          duration: 0.4,
+                          ease: BASE_CURVE,
+                          delay: Math.min(i * 0.04, 0.25),
+                        }}
+                        className="list-none"
+                      >
+                        <DoneTaskRow
+                          task={entry.task}
+                          doneAtLabel={entry.at ? `Done ${format(Date.parse(entry.at), "EEE d MMM")}` : null}
+                          onRestore={(task) => restoreTask(task, entry.origin)}
+                          onOpen={setDrawerTask}
+                        />
+                      </motion.li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+            )}
           </div>
 
           {/* ── Right rail ─────────────────────────────────────────────────── */}
@@ -971,15 +1132,15 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
               <div className="mt-6 rounded-xl bg-alt p-4">
                 <p className="caption-4 text-ink-3">Due date</p>
                 <p className="caption-1 mt-0.5 font-mono text-ink">{formatTaskDue(drawerTask.dueDate)}</p>
-                <p className="caption-4 mt-3 text-ink-3">Priority</p>
+                <p className="caption-4 mt-3 text-ink-3">Category</p>
                 <p className="mt-0.5">
                   <span
                     className={cn(
-                      "caption-3 inline-flex items-center gap-1 rounded-full px-2 py-1",
-                      PRIORITY_UI[drawerTask.priority].pill,
+                      "caption-3 inline-flex items-center rounded-full px-2 py-1",
+                      CATEGORY_UI[drawerTask.category].chip,
                     )}
                   >
-                    {drawerTask.priority}
+                    {drawerTask.category}
                   </span>
                 </p>
                 <p className="caption-4 mt-3 text-ink-3">Action summary</p>
@@ -992,17 +1153,31 @@ export function DashboardClient({ user, isDemo }: { user: SyncMeUser; isDemo: bo
                 </pre>
               </div>
               <div className="mt-6 flex flex-col gap-2 sm:flex-row">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const task = drawerTask;
-                    setDrawerTask(null);
-                    startComplete(task);
-                  }}
-                  className={cn(BUTTON_PRIMARY, "flex-1")}
-                >
-                  Mark done
-                </button>
+                {doneIds.has(drawerTask.id) ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const entry = doneTasks[drawerTask.id];
+                      setDrawerTask(null);
+                      restoreTask(drawerTask, entry?.origin ?? (drawerTask.source === "Moodle" ? "moodle" : "gmail"));
+                    }}
+                    className={cn(BUTTON_PRIMARY, "flex-1")}
+                  >
+                    Restore to schedule
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const task = drawerTask;
+                      setDrawerTask(null);
+                      startComplete(task);
+                    }}
+                    className={cn(BUTTON_PRIMARY, "flex-1")}
+                  >
+                    Mark done
+                  </button>
+                )}
                 <button type="button" onClick={() => setDrawerTask(null)} className={cn(BUTTON_SECONDARY, "flex-1")}>
                   Close
                 </button>

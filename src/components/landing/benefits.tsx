@@ -47,16 +47,13 @@ export function Benefits() {
     },
     {
       title: "Read less, act faster",
-      detail: "Messy email threads become clean tasks with a due date, a priority, and a one line next step.",
+      detail: "Messy email threads become clean tasks with a due date, a category, and a one line next step.",
       icon: Sparkle,
       tintBg: "bg-cat-medical-bg",
       tintText: "text-cat-medical",
       fragment: (
         <div className="flex items-center gap-2 rounded-lg border border-border bg-white px-3 py-2">
-          <span className="caption-3 inline-flex items-center gap-1 rounded-full bg-status-high-bg px-2 py-1 text-status-high">
-            <WarningCircle className="h-3 w-3" aria-hidden="true" />
-            High
-          </span>
+          <span className="caption-3 rounded-full bg-cat-immigration-bg px-2 py-1 text-cat-immigration">Immigration</span>
           <span className="caption-4 truncate text-ink-3">Upload scanned documents</span>
           <span className="caption-4 ml-auto shrink-0 font-mono text-ink">Mon 14 Dec, 17:00</span>
         </div>

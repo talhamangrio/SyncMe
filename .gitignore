@@ -69,3 +69,4 @@ Caddyfile
 # session handoff doc with secrets - never push
 SYNCME_HANDOFF.md
 tool-results/
+.zscripts/dev.pid

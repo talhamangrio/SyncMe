@@ -5,6 +5,7 @@ import {
   BookOpen,
   CaretRight,
   Check,
+  CheckCircle,
   GraduationCap,
   IdentificationCard,
   Stethoscope,
@@ -12,14 +13,7 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 import type { Icon } from "@phosphor-icons/react";
 import { normalizeDueDate } from "@/lib/dates";
-import {
-  CATEGORY_UI,
-  PRIORITY_UI,
-  SOURCE_CHIP,
-  URGENCY_PILL,
-  type SyncTask,
-  type TaskCategory,
-} from "@/lib/types";
+import { CATEGORY_UI, SOURCE_CHIP, URGENCY_PILL, type SyncTask, type TaskCategory } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 /** Phosphor icon per category — natural metaphors instead of tech jargon. */
@@ -53,16 +47,17 @@ export interface TaskCardProps {
 
 /**
  * The compact task row: a clean white surface with a hairline border, a 20px
- * circular checkbox (44px touch target), a 28px category icon badge, one
- * title line with category and source pills, a one line action summary, and
- * an aligned metadata column (mono due date, priority badge, caret). Clicking
- * the row opens the source drawer. No colored background washes — the only
- * tint lives on the small pills.
+ * circular checkbox (44px touch target) and a 28px category icon badge on the
+ * left, a full readable two line title plus a two line action summary and an
+ * inline category chip in the flexible center, and a metadata column (mono due
+ * date, urgency pill, caret) on the right. Below 640px the date/time and the
+ * urgency pill stack cleanly under the action line instead of squeezing the
+ * text. No priority badges — rows stay calm; the only tint lives on the small
+ * pills.
  */
 export function TaskCard({ task, onOpen, onToggleDone, done = false, showUrgency = false }: TaskCardProps) {
   const cat = CATEGORY_UI[task.category];
   const CatIcon = CATEGORY_ICONS[task.category];
-  const prio = PRIORITY_UI[task.priority];
 
   const normalized = normalizeDueDate(task.dueDate);
   const dueMs = normalized === "unknown" ? Number.NaN : Date.parse(normalized);
@@ -72,6 +67,33 @@ export function TaskCard({ task, onOpen, onToggleDone, done = false, showUrgency
   const hoursLeft = Math.max(1, Math.round(dueInMs / 3_600_000));
 
   const interactive = Boolean(onOpen);
+
+  /** Geist Mono due date & time — red tint once the moment has passed. */
+  const dueChip = (
+    <span
+      suppressHydrationWarning
+      className={cn(
+        "shrink-0 whitespace-nowrap font-mono text-xs font-medium leading-4",
+        overdue ? "text-status-high" : "text-mono-ink",
+      )}
+    >
+      {formatTaskDue(task.dueDate)}
+    </span>
+  );
+
+  /** Urgent countdown pill — only when due within 24 hours (or overdue). */
+  const urgencyChip = showUrgency && (overdue || urgent) ? (
+    <span
+      suppressHydrationWarning
+      className={cn(
+        "caption-3 inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1",
+        URGENCY_PILL,
+      )}
+    >
+      <WarningCircle className="h-3 w-3" aria-hidden="true" />
+      {overdue ? "Overdue" : `Due in ${hoursLeft} hour${hoursLeft === 1 ? "" : "s"}`}
+    </span>
+  ) : null;
 
   return (
     <div
@@ -135,79 +157,143 @@ export function TaskCard({ task, onOpen, onToggleDone, done = false, showUrgency
         <CatIcon className="h-4 w-4" />
       </span>
 
-      {/* Title line + one line summary (the mono date rides the summary line on mobile) */}
+      {/* Full readable title (up to two lines) + action summary + inline category chip */}
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <h3 className="truncate text-[15px] font-medium leading-5 text-ink">{task.title}</h3>
-          <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-xs leading-4", cat.chip)}>
-            {task.category}
+        <div className="flex items-start justify-between gap-2">
+          <h3 className="line-clamp-2 min-w-0 text-sm font-semibold leading-snug text-ink">{task.title}</h3>
+          <span className="mt-0.5 flex shrink-0 items-center gap-1.5">
+            <span className={cn("rounded-full px-2 py-0.5 text-xs leading-4", cat.chip)}>{task.category}</span>
+            {task.source ? (
+              <span
+                className={cn(
+                  "hidden shrink-0 rounded-full px-2 py-0.5 text-xs leading-4 sm:inline",
+                  SOURCE_CHIP,
+                )}
+              >
+                {task.source}
+              </span>
+            ) : null}
           </span>
-          {task.source ? (
-            <span
-              className={cn(
-                "hidden shrink-0 rounded-full px-2 py-0.5 text-xs leading-4 sm:inline",
-                SOURCE_CHIP,
-              )}
-            >
-              {task.source}
-            </span>
-          ) : null}
         </div>
-        <div className="mt-0.5 flex items-center gap-2">
-          <p className="min-w-0 flex-1 truncate text-xs leading-4 text-ink-3">{task.actionSummary}</p>
-          <span
-            suppressHydrationWarning
-            className={cn(
-              "shrink-0 whitespace-nowrap font-mono text-xs font-medium leading-4 sm:hidden",
-              overdue ? "text-status-high" : "text-mono-ink",
-            )}
-          >
-            {formatTaskDue(task.dueDate)}
-          </span>
+        <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-ink-2">{task.actionSummary}</p>
+
+        {/* Mobile: the exact date/time and urgency stack cleanly under the action line */}
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 sm:hidden">
+          {dueChip}
+          {urgencyChip}
         </div>
       </div>
 
-      {/* Compact priority chip on small screens */}
-      <span
-        className={cn(
-          "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs leading-4 sm:hidden",
-          prio.pill,
-        )}
-      >
-        {prio.label}
-      </span>
-
-      {/* Aligned metadata column: urgency, mono date, priority, caret (desktop) */}
+      {/* Desktop metadata column: urgency, mono date, caret */}
       <div className="hidden shrink-0 items-center gap-3 sm:flex">
-        {showUrgency && (overdue || urgent) ? (
-          <span
-            suppressHydrationWarning
-            className={cn(
-              "caption-3 hidden items-center gap-1 rounded-full px-2 py-1 sm:inline-flex",
-              URGENCY_PILL,
-            )}
-          >
-            <WarningCircle className="h-3 w-3" aria-hidden="true" />
-            {overdue ? "Overdue" : `Due in ${hoursLeft} hour${hoursLeft === 1 ? "" : "s"}`}
-          </span>
-        ) : null}
-        <span
-          suppressHydrationWarning
-          className={cn(
-            "whitespace-nowrap font-mono text-xs font-medium leading-4",
-            overdue ? "text-status-high" : "text-mono-ink",
-          )}
-        >
-          {formatTaskDue(task.dueDate)}
-        </span>
-        <span className={cn("inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs leading-4", prio.pill)}>
-          {prio.label}
-        </span>
+        {urgencyChip}
+        {dueChip}
         <CaretRight
           aria-hidden="true"
           className="hidden h-4 w-4 shrink-0 text-ink-4 transition-transform duration-200 ease-base group-hover/row:translate-x-0.5 sm:block"
         />
       </div>
+    </div>
+  );
+}
+
+export interface DoneTaskRowProps {
+  task: SyncTask;
+  /** Formatted completion label, e.g. "Done Tue 18 Nov". */
+  doneAtLabel?: string | null;
+  /** Restores the task back into its chronological day group. */
+  onRestore?: (task: SyncTask) => void;
+  /** Opens the source drawer. */
+  onOpen?: (task: SyncTask) => void;
+}
+
+/**
+ * A completed task row: a filled blue CheckCircle (44px touch target) that
+ * unchecks on click, a 28px category icon badge, a muted two line title and
+ * the one line action summary, and the mono "Done <date>" label on desktop.
+ * Clicking the circle removes the task from the Done list and restores it
+ * into the upcoming schedule.
+ */
+export function DoneTaskRow({ task, doneAtLabel, onRestore, onOpen }: DoneTaskRowProps) {
+  const cat = CATEGORY_UI[task.category];
+  const CatIcon = CATEGORY_ICONS[task.category];
+  const interactive = Boolean(onOpen);
+
+  return (
+    <div
+      role={interactive ? "button" : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      onClick={onOpen ? () => onOpen(task) : undefined}
+      onKeyDown={
+        onOpen
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onOpen(task);
+              }
+            }
+          : undefined
+      }
+      aria-label={interactive ? `Open source for ${task.title}` : undefined}
+      className={cn(
+        "group/row relative flex w-full items-center gap-3 rounded-xl border border-border bg-white px-4 py-3 text-left",
+        "transition-[background-color,border-color,box-shadow] duration-200 ease-base",
+        "hover:border-line-strong hover:bg-page",
+        interactive && "cursor-pointer",
+        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand",
+      )}
+    >
+      {/* Filled check circle — click to uncheck and restore (44px touch target) */}
+      {onRestore ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRestore(task);
+          }}
+          aria-label={`Restore "${task.title}" to schedule`}
+          className="group/uncheck -m-3 flex h-11 w-11 shrink-0 items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand active:scale-[0.95]"
+        >
+          <CheckCircle
+            weight="fill"
+            aria-hidden="true"
+            className="h-5 w-5 text-brand transition-colors duration-200 ease-base group-hover/uncheck:text-ink-4"
+          />
+        </button>
+      ) : (
+        <span aria-hidden="true" className="-m-3 flex h-11 w-11 shrink-0 items-center justify-center">
+          <CheckCircle weight="fill" className="h-5 w-5 text-brand" />
+        </span>
+      )}
+
+      {/* 28px category icon badge in the slate inset */}
+      <span
+        aria-hidden="true"
+        className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-alt", cat.icon)}
+      >
+        <CatIcon className="h-4 w-4" />
+      </span>
+
+      {/* Muted title (up to two lines) + one line action summary */}
+      <div className="min-w-0 flex-1">
+        <h3 className="line-clamp-2 min-w-0 text-sm font-medium leading-snug text-ink-3">{task.title}</h3>
+        <p className="mt-0.5 line-clamp-1 text-xs leading-relaxed text-ink-4">{task.actionSummary}</p>
+      </div>
+
+      {/* Mono "Done <date>" label on desktop */}
+      {doneAtLabel ? (
+        <span
+          suppressHydrationWarning
+          className="hidden shrink-0 whitespace-nowrap font-mono text-xs font-medium leading-4 text-ink-3 sm:block"
+        >
+          {doneAtLabel}
+        </span>
+      ) : null}
+
+      <CaretRight
+        aria-hidden="true"
+        className="hidden h-4 w-4 shrink-0 text-ink-4 transition-transform duration-200 ease-base group-hover/row:translate-x-0.5 sm:block"
+      />
     </div>
   );
 }

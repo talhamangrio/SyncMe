@@ -22,7 +22,7 @@ const STEPS: Step[] = [
   {
     num: "03",
     title: "Act",
-    text: "Work a sorted list with priorities and conflict alerts. No typing, no missed email.",
+    text: "Work a day-by-day list with conflict alerts. No typing, no missed email.",
   },
 ];
 
