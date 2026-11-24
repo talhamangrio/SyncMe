@@ -44,79 +44,80 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* ─── SyncMe — calm daylight palette ────────────────────────────────────────
-   Airy White #F6F9FC · Pure Card #FFFFFF · Deep Calm Slate #16283A
-   Clear Sky Blue #2578BF — minimalist, natural, high contrast               */
+/* ─── SyncMe — dark editorial palette ──────────────────────────────────────
+   Ink #18191C · Card #232529 · Cloud #E4E5E7 · Signal Yellow #FFC93C
+   Minimalist, editorial, high contrast — the SyncMe signature look.         */
 :root {
   --radius: 0.75rem;
-  --background: #f6f9fc;
-  --foreground: #16283a;
-  --card: #ffffff;
-  --card-foreground: #16283a;
-  --popover: #ffffff;
-  --popover-foreground: #16283a;
-  --primary: #2578bf;
-  --primary-foreground: #ffffff;
-  --secondary: #e9f1f8;
-  --secondary-foreground: #2a4a67;
-  --muted: #eef3f8;
-  --muted-foreground: #5b7086;
-  --accent: #e8f1fa;
-  --accent-foreground: #1d5f94;
-  --destructive: #d64550;
+  --background: #18191c;
+  --foreground: #e4e5e7;
+  --card: #232529;
+  --card-foreground: #e4e5e7;
+  --popover: #232529;
+  --popover-foreground: #e4e5e7;
+  --primary: #ffc93c;
+  --primary-foreground: #18191c;
+  --secondary: #2a2c31;
+  --secondary-foreground: #e4e5e7;
+  --muted: #1e2024;
+  --muted-foreground: #9ba0a8;
+  --accent: #2a2c31;
+  --accent-foreground: #ffc93c;
+  --destructive: #ef5350;
   --destructive-foreground: #ffffff;
-  --border: #e2eaf2;
-  --input: #d8e3ee;
-  --ring: #7fb7e3;
-  --chart-1: #2578bf;
+  --border: #2e3136;
+  --input: #34373d;
+  --ring: #ffc93c;
+  --chart-1: #ffc93c;
   --chart-2: #34a97b;
   --chart-3: #e5a13c;
-  --chart-4: #d64550;
-  --chart-5: #8aa2b8;
-  --sidebar: #ffffff;
-  --sidebar-foreground: #16283a;
-  --sidebar-primary: #2578bf;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #e8f1fa;
-  --sidebar-accent-foreground: #1d5f94;
-  --sidebar-border: #e2eaf2;
-  --sidebar-ring: #7fb7e3;
+  --chart-4: #ef5350;
+  --chart-5: #8a919b;
+  --sidebar: #232529;
+  --sidebar-foreground: #e4e5e7;
+  --sidebar-primary: #ffc93c;
+  --sidebar-primary-foreground: #18191c;
+  --sidebar-accent: #2a2c31;
+  --sidebar-accent-foreground: #ffc93c;
+  --sidebar-border: #2e3136;
+  --sidebar-ring: #ffc93c;
 }
 
-/* Safety mirror: even if a .dark class is ever toggled, SyncMe stays light. */
+/* Safety mirror: even if a .dark class is ever toggled, SyncMe stays in its
+   dark editorial skin — the palette is the brand. */
 .dark {
-  --background: #f6f9fc;
-  --foreground: #16283a;
-  --card: #ffffff;
-  --card-foreground: #16283a;
-  --popover: #ffffff;
-  --popover-foreground: #16283a;
-  --primary: #2578bf;
-  --primary-foreground: #ffffff;
-  --secondary: #e9f1f8;
-  --secondary-foreground: #2a4a67;
-  --muted: #eef3f8;
-  --muted-foreground: #5b7086;
-  --accent: #e8f1fa;
-  --accent-foreground: #1d5f94;
-  --destructive: #d64550;
+  --background: #18191c;
+  --foreground: #e4e5e7;
+  --card: #232529;
+  --card-foreground: #e4e5e7;
+  --popover: #232529;
+  --popover-foreground: #e4e5e7;
+  --primary: #ffc93c;
+  --primary-foreground: #18191c;
+  --secondary: #2a2c31;
+  --secondary-foreground: #e4e5e7;
+  --muted: #1e2024;
+  --muted-foreground: #9ba0a8;
+  --accent: #2a2c31;
+  --accent-foreground: #ffc93c;
+  --destructive: #ef5350;
   --destructive-foreground: #ffffff;
-  --border: #e2eaf2;
-  --input: #d8e3ee;
-  --ring: #7fb7e3;
-  --chart-1: #2578bf;
+  --border: #2e3136;
+  --input: #34373d;
+  --ring: #ffc93c;
+  --chart-1: #ffc93c;
   --chart-2: #34a97b;
   --chart-3: #e5a13c;
-  --chart-4: #d64550;
-  --chart-5: #8aa2b8;
-  --sidebar: #ffffff;
-  --sidebar-foreground: #16283a;
-  --sidebar-primary: #2578bf;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #e8f1fa;
-  --sidebar-accent-foreground: #1d5f94;
-  --sidebar-border: #e2eaf2;
-  --sidebar-ring: #7fb7e3;
+  --chart-4: #ef5350;
+  --chart-5: #8a919b;
+  --sidebar: #232529;
+  --sidebar-foreground: #e4e5e7;
+  --sidebar-primary: #ffc93c;
+  --sidebar-primary-foreground: #18191c;
+  --sidebar-accent: #2a2c31;
+  --sidebar-accent-foreground: #ffc93c;
+  --sidebar-border: #2e3136;
+  --sidebar-ring: #ffc93c;
 }
 
 @layer base {
@@ -124,16 +125,16 @@
     @apply border-border outline-ring/50;
   }
   html {
-    color-scheme: light;
+    color-scheme: dark;
   }
   body {
     @apply bg-background text-foreground;
   }
 }
 
-/* ─── Gradient daylight backdrop — soft light blobs behind every page ───────
-   A fixed, pointer-transparent layer: sky blue top-left, aqua top-right,
-   mint low-center. Static and subtle — no noise, no animation.              */
+/* ─── Editorial glow backdrop — faint signal-yellow / teal light pools ──────
+   A fixed, pointer-transparent layer behind every page. Static and subtle —
+   no noise, no animation, pure ambience on the ink canvas.                  */
 body::before {
   content: "";
   position: fixed;
@@ -141,32 +142,32 @@ body::before {
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(56rem 34rem at 10% -10%, rgba(124, 189, 233, 0.24), transparent 62%),
-    radial-gradient(48rem 30rem at 92% -6%, rgba(150, 213, 226, 0.18), transparent 60%),
-    radial-gradient(52rem 36rem at 46% 112%, rgba(186, 228, 205, 0.16), transparent 62%);
+    radial-gradient(56rem 34rem at 10% -10%, rgba(255, 201, 60, 0.06), transparent 62%),
+    radial-gradient(48rem 30rem at 92% -6%, rgba(94, 145, 186, 0.07), transparent 60%),
+    radial-gradient(52rem 36rem at 46% 112%, rgba(52, 169, 123, 0.05), transparent 62%);
 }
 
-/* ─── Soft elevation utilities (Tailwind v4 custom shadows) ───────────────── */
+/* ─── Soft elevation utilities (Tailwind v4 custom shadows) ─────────────── */
 @utility shadow-soft {
   box-shadow:
-    0 1px 2px rgba(22, 40, 58, 0.05),
-    0 16px 40px -24px rgba(22, 40, 58, 0.22);
+    0 1px 2px rgba(0, 0, 0, 0.28),
+    0 16px 40px -24px rgba(0, 0, 0, 0.55);
 }
 
 @utility shadow-lift {
   box-shadow:
-    0 2px 4px rgba(22, 40, 58, 0.06),
-    0 24px 48px -20px rgba(22, 40, 58, 0.26);
+    0 2px 4px rgba(0, 0, 0, 0.3),
+    0 24px 48px -20px rgba(0, 0, 0, 0.6);
 }
 
-@utility shadow-btn-blue {
-  box-shadow: 0 8px 24px -8px rgba(37, 120, 191, 0.55);
+@utility shadow-btn-accent {
+  box-shadow: 0 8px 24px -8px rgba(255, 201, 60, 0.4);
 }
 
-/* ─── Slim scrollbar tuned for the light theme ────────────────────────────── */
+/* ─── Slim scrollbar tuned for the dark editorial theme ──────────────────── */
 .scrollbar-slim {
   scrollbar-width: thin;
-  scrollbar-color: #c3d4e4 transparent;
+  scrollbar-color: #3a3d45 transparent;
 }
 .scrollbar-slim::-webkit-scrollbar {
   width: 6px;
@@ -176,21 +177,21 @@ body::before {
   background: transparent;
 }
 .scrollbar-slim::-webkit-scrollbar-thumb {
-  background: #c3d4e4;
+  background: #3a3d45;
   border-radius: 999px;
 }
 .scrollbar-slim::-webkit-scrollbar-thumb:hover {
-  background: #a9c1d7;
+  background: #4a4e57;
 }
 
-/* ─── Live pulse dot for status pills (blue) + amber variant for warnings ── */
+/* ─── Live pulse dot for status pills (signal yellow) + amber variant ────── */
 @keyframes syncme-live {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(37, 120, 191, 0.45);
+    box-shadow: 0 0 0 0 rgba(255, 201, 60, 0.45);
   }
   50% {
-    box-shadow: 0 0 0 5px rgba(37, 120, 191, 0);
+    box-shadow: 0 0 0 5px rgba(255, 201, 60, 0);
   }
 }
 .live-dot {
@@ -210,13 +211,13 @@ body::before {
   animation: syncme-live-amber 1.8s cubic-bezier(0.22, 1, 0.36, 1) infinite;
 }
 
-/* ─── Design-skill motion utilities ──────────────────────────────────────────
+/* ─── Design-skill motion utilities ────────────────────────────────────────
    Base curve: weighted deceleration, never a browser default ease.          */
 @utility ease-base {
   transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* ─── Tagline reveal (B11): words rest at ~30%, activate one by one ───────── */
+/* ─── Tagline reveal (B11): words rest at ~30%, activate one by one ──────── */
 .word-reveal {
   opacity: 0.3;
   transition: opacity 500ms cubic-bezier(0.22, 1, 0.36, 1);

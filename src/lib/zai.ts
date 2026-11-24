@@ -5,6 +5,7 @@
 
 import type { RawEmail, SyncTask, TaskCategory, TaskPriority } from "@/lib/types";
 import { sanitizeTask } from "@/lib/types";
+import { budapestTodayKey } from "@/lib/dates";
 
 const ZAI_ENDPOINT = "https://api.z.ai/api/paas/v4/chat/completions";
 // glm-4.5-flash is the free tier workhorse (verified live: strict JSON with
@@ -14,19 +15,22 @@ const PRIMARY_MODEL = process.env.ZAI_MODEL || "glm-4.5-flash";
 const FALLBACK_MODELS = ["glm-4.7-flash", "glm-4.6"];
 const AI_TIMEOUT_MS = 20_000;
 
-function buildSystemPrompt(nowIso: string): string {
+function buildSystemPrompt(nowIso: string, todayKey: string): string {
   return `You are SyncMe, an extraction engine for a university student's inbox at the University of Debrecen (Hungary).
 You receive a list of recent emails: Neptun university messages, Moodle/elearning notices, clinic/medical appointments, immigration (Enter Hungary) letters, and professor emails.
 Current date & time: ${nowIso} (Europe/Budapest).
+Today's date: ${todayKey}.
+
+STRICT EXPIRATION RULE — obey absolutely: Strictly exclude and discard any event, exam, quiz, appointment, or deadline whose dueDate is before today's date (${todayKey}). Only extract items occurring today (${todayKey}) or in the future. Never output a dueDate earlier than ${todayKey}.
 
 Rules:
-- IGNORE newsletters, promotions, spam, social media notifications (LinkedIn, Facebook, Instagram, X/Twitter, TikTok), GitHub/GitLab alerts, and emails whose events or deadlines are entirely in the PAST (before the current date/time).
+- IGNORE newsletters, promotions, spam, social media notifications (LinkedIn, Facebook, Instagram, X/Twitter, TikTok), GitHub/GitLab alerts.
 - IGNORE PERSONAL correspondence: messages between classmates or friends, chat-like small talk, "I sent a file", file-sharing notes, photos, jokes, one-word or number-only subjects ("33", "ok") — even when sent from a @unideb.hu student address. SyncMe is for institutional mail only.
 - IGNORE emails the student has ALREADY ANSWERED (their reply was sent) or where the requested action is already completed: confirmation receipts, acknowledgment emails, "we received your submission" notices.
 - EXTRACT ONLY actionable items in these scopes: ACADEMIC (deadlines, exams, Neptun admin, registration, payments), EDUCATIONAL (Moodle quizzes, assignments, homework), IMMIGRATION (residence permit, Enter Hungary, document appointments), HEALTH (Klinikák/clinic/doctor appointments), PROFESSIONAL (professor or administration correspondence with a personal action or deadline).
 - For every actionable email produce exactly ONE task object.
 - "category" must be exactly one of: "Neptun" (exams, grades, registration, professor/admin mail), "Moodle" (e-learning, quizzes, assignments), "Medical" (clinic, doctor, appointments), "Immigration" (residence permit, Enter Hungary, aliens policing).
-- "dueDate": resolve the most relevant future date mentioned into ISO-8601 (Europe/Budapest). If no future date is stated, use the literal string "unknown".
+- "dueDate": resolve the most relevant future date mentioned (today ${todayKey} or later) into an ISO-8601 datetime "YYYY-MM-DDTHH:mm:ss" in Europe/Budapest time — never before ${todayKey}. If no future date is stated, use the literal string "unknown".
 - "priority": "High" for exams, immigration matters or deadlines within 72 hours; "Medium" for quizzes and appointments; "Low" for everything else.
 - "actionSummary": one short sentence telling the student exactly what to do.
 - "sourceEmailSubject": copy the exact subject line of the email the task came from.
@@ -36,7 +40,7 @@ Respond with ONLY valid JSON — no markdown fences, no commentary — in this e
 If no email is actionable, respond {"tasks": []}.`;
 }
 
-function buildUserPrompt(emails: RawEmail[], nowIso: string): string {
+function buildUserPrompt(emails: RawEmail[], nowIso: string, todayKey: string): string {
   const payload = emails.map((e) => ({
     id: e.id,
     subject: e.subject,
@@ -44,7 +48,10 @@ function buildUserPrompt(emails: RawEmail[], nowIso: string): string {
     date: e.date,
     body: e.snippet.slice(0, 1200),
   }));
-  return `Current ISO date/time: ${nowIso}\n\nEmail list (JSON):\n${JSON.stringify(payload)}`;
+  return `Current ISO date/time: ${nowIso} (Europe/Budapest)
+Today's date: ${todayKey} — discard every item dated before this day.
+
+Email list (JSON):\n${JSON.stringify(payload)}`;
 }
 
 function stripFences(text: string): string {
@@ -67,7 +74,7 @@ function parseTasks(content: string): SyncTask[] | null {
   }
 }
 
-async function callModel(model: string, emails: RawEmail[], nowIso: string): Promise<SyncTask[]> {
+async function callModel(model: string, emails: RawEmail[], nowIso: string, todayKey: string): Promise<SyncTask[]> {
   const res = await fetch(ZAI_ENDPOINT, {
     method: "POST",
     headers: {
@@ -81,8 +88,8 @@ async function callModel(model: string, emails: RawEmail[], nowIso: string): Pro
       // Disable chain-of-thought for fast, deterministic structured extraction.
       thinking: { type: "disabled" },
       messages: [
-        { role: "system", content: buildSystemPrompt(nowIso) },
-        { role: "user", content: buildUserPrompt(emails, nowIso) },
+        { role: "system", content: buildSystemPrompt(nowIso, todayKey) },
+        { role: "user", content: buildUserPrompt(emails, nowIso, todayKey) },
       ],
     }),
     signal: AbortSignal.timeout(AI_TIMEOUT_MS),
@@ -96,13 +103,13 @@ async function callModel(model: string, emails: RawEmail[], nowIso: string): Pro
 }
 
 /** Middle fallback: the bundled Z.ai SDK (used inside the Z.ai sandbox runtime). */
-async function callSdkFallback(emails: RawEmail[], nowIso: string): Promise<SyncTask[]> {
+async function callSdkFallback(emails: RawEmail[], nowIso: string, todayKey: string): Promise<SyncTask[]> {
   const { default: ZAI } = await import("z-ai-web-dev-sdk");
   const zai = await ZAI.create();
   const completion = (await zai.chat.completions.create({
     messages: [
-      { role: "assistant", content: buildSystemPrompt(nowIso) },
-      { role: "user", content: buildUserPrompt(emails, nowIso) },
+      { role: "assistant", content: buildSystemPrompt(nowIso, todayKey) },
+      { role: "user", content: buildUserPrompt(emails, nowIso, todayKey) },
     ],
   })) as { choices?: { message?: { content?: string } }[] };
   const content = completion.choices?.[0]?.message?.content ?? "";
@@ -169,12 +176,13 @@ export async function extractTasks(
   if (emails.length === 0) return { tasks: [], aiStatus: "ai" };
 
   const nowIso = now.toISOString();
+  const todayKey = budapestTodayKey(now);
   const models = [PRIMARY_MODEL, ...FALLBACK_MODELS];
 
   for (const model of models) {
     if (!process.env.ZAI_API_KEY) break;
     try {
-      const tasks = await callModel(model, emails, nowIso);
+      const tasks = await callModel(model, emails, nowIso, todayKey);
       return { tasks, aiStatus: "ai" };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -186,7 +194,7 @@ export async function extractTasks(
   }
 
   try {
-    const tasks = await callSdkFallback(emails, nowIso);
+    const tasks = await callSdkFallback(emails, nowIso, todayKey);
     return { tasks, aiStatus: "ai" };
   } catch (err) {
     console.error("[SyncMe] SDK fallback failed:", err instanceof Error ? err.message : err);

@@ -11,6 +11,7 @@
 
 import type { RawEmail, SyncTask } from "@/lib/types";
 import { sanitizeTask } from "@/lib/types";
+import { budapestTodayKey } from "@/lib/dates";
 
 const GEMINI_ENDPOINT_MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
 const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_ENDPOINT_MODEL}:generateContent`;
@@ -18,7 +19,7 @@ const GEMINI_TIMEOUT_MS = 30_000;
 /** Placeholder written into .env.example / .env.local before the real key exists. */
 const KEY_PLACEHOLDER = "PASTE_YOUR_GEMINI_KEY_HERE";
 
-function buildPrompt(emails: RawEmail[], nowIso: string): string {
+function buildPrompt(emails: RawEmail[], nowIso: string, todayKey: string): string {
   const payload = emails.map((e) => ({
     id: e.id,
     subject: e.subject,
@@ -29,7 +30,9 @@ function buildPrompt(emails: RawEmail[], nowIso: string): string {
 
   return `You are SyncMe, an AI extraction engine for a university student's inbox at the University of Debrecen (Hungary).
 Current date & time: ${nowIso} (Europe/Budapest timezone).
+Today's date: ${todayKey}.
 
+STRICT EXPIRATION RULE — you must obey this absolutely: Strictly exclude and discard any event, exam, quiz, appointment, or deadline whose dueDate is before today's date (${todayKey}). Only extract items occurring today (${todayKey}) or in the future. Never output a dueDate earlier than ${todayKey}.
 You receive a JSON list of recent emails: Neptun university messages, Moodle/elearning notices, clinic (Klinikák) medical appointments, immigration / Enter Hungary / residence permit letters, and professor emails.
 
 IGNORE completely — never create tasks for them:
@@ -40,7 +43,6 @@ IGNORE completely — never create tasks for them:
 - PERSONAL correspondence: messages between classmates or friends, chat-like small talk, "I sent a file", file-sharing notes, photos, jokes, one-word or number-only subjects ("33", "ok") — even when they come from a @unideb.hu student address. SyncMe is for institutional mail only.
 - General university announcements, campus events, talks or news with NO personal action required and NO personal deadline.
 - Emails the student has ALREADY ANSWERED (their reply was sent) or where the requested action is already completed: confirmation receipts, acknowledgment emails, "we received your submission" notices.
-- Any email whose deadlines or events are entirely in the PAST (earlier than the current ISO timestamp above).
 
 EXTRACT ONLY actionable student items in these scopes:
 - ACADEMIC: student deadlines, exams and exam registrations, grades, certificates, Neptun administrative tasks, subject registration, payments.
@@ -56,7 +58,7 @@ Field rules:
 - "id": short unique slug derived from the source email id.
 - "title": concise imperative summary, max 120 characters.
 - "category": exactly one of "Neptun" (exams, grades, registration, professor/admin mail), "Moodle" (e-learning, quizzes, assignments), "Medical" (clinic, doctor, appointments), "Immigration" (residence permit, Enter Hungary, aliens policing).
-- "dueDate": resolve the most relevant FUTURE date mentioned into ISO-8601 (Europe/Budapest). If no future date is stated, use the literal string "unknown".
+- "dueDate": resolve the most relevant FUTURE date mentioned (today ${todayKey} or later) into an ISO-8601 datetime "YYYY-MM-DDTHH:mm:ss" in Europe/Budapest time — never before ${todayKey}. If no future date is stated, use the literal string "unknown".
 - "priority": "High" for exams, immigration matters or deadlines within 72 hours; "Medium" for quizzes and appointments; "Low" for everything else.
 - "actionSummary": one short sentence telling the student exactly what to do.
 - "sourceEmailSubject": the exact subject line of the email the task came from.
@@ -80,13 +82,14 @@ export async function extractTasksGemini(
   const apiKey = process.env.GEMINI_API_KEY;
   // Not configured yet (or still the paste-me placeholder) — no doomed request.
   if (!apiKey || apiKey === KEY_PLACEHOLDER) return null;
+  const todayKey = budapestTodayKey(now);
 
   try {
     const res = await fetch(`${GEMINI_ENDPOINT}?key=${encodeURIComponent(apiKey)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: buildPrompt(emails, now.toISOString()) }] }],
+        contents: [{ role: "user", parts: [{ text: buildPrompt(emails, now.toISOString(), todayKey) }] }],
         generationConfig: { responseMimeType: "application/json", temperature: 0.1 },
       }),
       signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),

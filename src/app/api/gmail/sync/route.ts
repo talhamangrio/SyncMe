@@ -8,6 +8,7 @@ import {
 } from "@/lib/gmail";
 import { dedupeTasks, extractTasks } from "@/lib/zai";
 import { extractTasksGemini } from "@/lib/gemini";
+import { dropExpiredTasks, normalizeDueDate, sortChronologically } from "@/lib/dates";
 import type { RawEmail, SyncTask } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -33,7 +34,11 @@ async function extractWithFallback(
  *   2. query Gmail for university email (last 30 days, max 12),
  *   3. extract strict-JSON tasks with Google Gemini (primary), silently
  *      falling back to Z.ai when Gemini is unavailable,
- *   4. return { tasks, emails, aiStatus }.
+ *   4. deterministic post-processing on the server: normalize every dueDate
+ *      into ISO-8601 `YYYY-MM-DDTHH:mm:ss` (Europe/Budapest), DROP any task
+ *      dated strictly before today, dedupe, and sort strictly ascending
+ *      chronological (`getTime() - getTime()` — earliest upcoming first),
+ *   5. return { tasks, emails, aiStatus }.
  *
  * Nothing is persisted: emails live only for the duration of this request.
  * When the access token has expired but a refresh-token cookie is present,
@@ -55,7 +60,11 @@ export async function GET() {
   const attempt = async (accessToken: string) => {
     const emails = await fetchUniversityEmails(accessToken, 12);
     const { tasks, aiStatus, engine } = await extractWithFallback(emails);
-    return { emails, tasks: dedupeTasks(tasks), aiStatus, engine };
+    // Deterministic expiration guard + normalization + strict chronological
+    // order — nothing dated before today (Europe/Budapest) ever leaves here.
+    const dated: SyncTask[] = tasks.map((t) => ({ ...t, dueDate: normalizeDueDate(t.dueDate) }));
+    const cleaned = sortChronologically(dropExpiredTasks(dedupeTasks(dated)));
+    return { emails, tasks: cleaned, aiStatus, engine };
   };
 
   try {

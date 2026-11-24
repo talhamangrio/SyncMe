@@ -1,13 +1,24 @@
 // ─── Demo Sandbox — simulated University of Debrecen inbox ──────────────────
-// Dates are computed dynamically so the demo always looks alive on stage.
+// Dates are computed dynamically relative to `new Date()` so the demo always
+// looks alive on stage: two tasks land TODAY (auto-clamped into the future so
+// they can never be expired) and the rest roll forward day by day.
 // Client-safe: no server-only imports.
 
 import type { RawEmail, SyncTask } from "@/lib/types";
+import { toBudapestIso } from "@/lib/dates";
 
 function inDaysAt(days: number, h: number, m: number): Date {
   const d = new Date();
   d.setDate(d.getDate() + days);
   d.setHours(h, m, 0, 0);
+  return d;
+}
+
+/** Today at h:m — if that moment already passed, push it 2 hours ahead so it is never expired. */
+function laterToday(h: number, m: number): Date {
+  const d = new Date();
+  d.setHours(h, m, 0, 0);
+  if (d.getTime() <= Date.now() + 30 * 60_000) return new Date(Date.now() + 2 * 3_600_000);
   return d;
 }
 
@@ -21,12 +32,13 @@ function human(d: Date): string {
   });
 }
 
-const quizDeadline = inDaysAt(1, 23, 59);
-const docsDeadline = inDaysAt(1, 12, 0);
-const examRegClose = inDaysAt(2, 23, 59);
-const thesisReplyBy = inDaysAt(2, 16, 0);
-const clinicAppt = inDaysAt(3, 9, 15);
-const examDate = inDaysAt(5, 10, 0);
+// Today (never expired — clamped into the future) and upcoming:
+const quizDeadline = laterToday(21, 30); // today evening
+const docsDeadline = laterToday(17, 0); // today afternoon
+const examRegClose = inDaysAt(1, 23, 59); // tomorrow midnight
+const thesisReplyBy = inDaysAt(1, 16, 0); // tomorrow afternoon
+const clinicAppt = inDaysAt(2, 9, 15);
+const examDate = inDaysAt(4, 10, 0);
 const permitAppt = inDaysAt(6, 8, 30);
 
 export const DEMO_EMAILS: RawEmail[] = [
@@ -127,7 +139,7 @@ export const DEMO_TASKS: SyncTask[] = [
     id: "demo-task-quiz",
     title: "Quiz 3 - Genetika closes",
     category: "Moodle",
-    dueDate: quizDeadline.toISOString(),
+    dueDate: toBudapestIso(quizDeadline),
     priority: "High",
     actionSummary: "Finish Quiz 3 on elearning.unideb.hu before it closes - 30 min limit, 1 attempt.",
     sourceEmailSubject: `Moodle: Quiz 3 (Genetika) closes ${human(quizDeadline)}`,
@@ -136,7 +148,7 @@ export const DEMO_TASKS: SyncTask[] = [
     id: "demo-task-docs",
     title: "Upload residence permit documents",
     category: "Immigration",
-    dueDate: docsDeadline.toISOString(),
+    dueDate: toBudapestIso(docsDeadline),
     priority: "High",
     actionSummary: "Scan and upload passport, TAJ card and accommodation certificate to the Enter Hungary portal.",
     sourceEmailSubject: `Enter Hungary: Upload residence permit documents before ${human(docsDeadline)}`,
@@ -145,7 +157,7 @@ export const DEMO_TASKS: SyncTask[] = [
     id: "demo-task-examreg",
     title: "Exam registration closes - MBVB13003",
     category: "Neptun",
-    dueDate: examRegClose.toISOString(),
+    dueDate: toBudapestIso(examRegClose),
     priority: "High",
     actionSummary: "Register (or deregister) for the Practical Biochemistry exam in Neptun before midnight.",
     sourceEmailSubject: "[Neptun] Exam registration closes soon - MBVB13003 Practical Biochemistry",
@@ -154,7 +166,7 @@ export const DEMO_TASKS: SyncTask[] = [
     id: "demo-task-thesis",
     title: "Confirm thesis topic to Prof. Kovács",
     category: "Neptun",
-    dueDate: thesisReplyBy.toISOString(),
+    dueDate: toBudapestIso(thesisReplyBy),
     priority: "Medium",
     actionSummary: "Reply to Prof. Kovács's email approving the proposed thesis topic.",
     sourceEmailSubject: "Re: Thesis topic approval - please confirm by replying",
@@ -163,7 +175,7 @@ export const DEMO_TASKS: SyncTask[] = [
     id: "demo-task-clinic",
     title: "Cardiology follow-up appointment",
     category: "Medical",
-    dueDate: clinicAppt.toISOString(),
+    dueDate: toBudapestIso(clinicAppt),
     priority: "Medium",
     actionSummary: "Attend the follow-up at Kenézy Campus Door 3; bring your TAJ card and referral letter.",
     sourceEmailSubject: "Appointment confirmation - Cardiology follow-up at the Klinika",
@@ -172,7 +184,7 @@ export const DEMO_TASKS: SyncTask[] = [
     id: "demo-task-exam",
     title: "Exam: Practical Biochemistry (ÉÉ-111)",
     category: "Neptun",
-    dueDate: examDate.toISOString(),
+    dueDate: toBudapestIso(examDate),
     priority: "Medium",
     actionSummary: "Sit the MBVB13003 written exam; arrive 15 minutes early with your student card.",
     sourceEmailSubject: "[Neptun] Exam registration closes soon - MBVB13003 Practical Biochemistry",
@@ -181,7 +193,7 @@ export const DEMO_TASKS: SyncTask[] = [
     id: "demo-task-permit",
     title: "Residence permit appointment",
     category: "Immigration",
-    dueDate: permitAppt.toISOString(),
+    dueDate: toBudapestIso(permitAppt),
     priority: "Medium",
     actionSummary: "Attend the aliens-policing appointment in Debrecen with all original documents.",
     sourceEmailSubject: `Enter Hungary: Upload residence permit documents before ${human(docsDeadline)}`,

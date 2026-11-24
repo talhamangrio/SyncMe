@@ -49,25 +49,25 @@ export interface MoodleSyncResponse {
 
 export const TASK_CATEGORIES: TaskCategory[] = ["Neptun", "Moodle", "Medical", "Immigration"];
 
-/** Light-theme category styling: a soft tinted chip behind the category icon. */
+/** Dark-editorial category styling: a tinted translucent chip behind the category icon. */
 export const CATEGORY_STYLES: Record<TaskCategory, { chip: string; dot: string }> = {
-  Neptun: { chip: "bg-sky-50 text-sky-600 ring-1 ring-inset ring-sky-100", dot: "bg-sky-500" },
-  Moodle: { chip: "bg-emerald-50 text-emerald-600 ring-1 ring-inset ring-emerald-100", dot: "bg-emerald-500" },
-  Medical: { chip: "bg-rose-50 text-rose-600 ring-1 ring-inset ring-rose-100", dot: "bg-rose-500" },
-  Immigration: { chip: "bg-amber-50 text-amber-600 ring-1 ring-inset ring-amber-100", dot: "bg-amber-500" },
+  Neptun: { chip: "bg-sky-400/12 text-sky-300 ring-1 ring-inset ring-sky-400/25", dot: "bg-sky-400" },
+  Moodle: { chip: "bg-emerald-400/12 text-emerald-300 ring-1 ring-inset ring-emerald-400/25", dot: "bg-emerald-400" },
+  Medical: { chip: "bg-rose-400/12 text-rose-300 ring-1 ring-inset ring-rose-400/25", dot: "bg-rose-400" },
+  Immigration: { chip: "bg-amber-400/12 text-amber-300 ring-1 ring-inset ring-amber-400/25", dot: "bg-amber-400" },
 };
 
-/** Light-theme priority styling: quiet colored text + matching dot. */
+/** Priority styling: quiet colored text + matching dot, tuned for the dark card surface. */
 export const PRIORITY_STYLES: Record<TaskPriority, string> = {
-  High: "text-rose-600",
-  Medium: "text-amber-600",
-  Low: "text-emerald-600",
+  High: "text-rose-300",
+  Medium: "text-amber-300",
+  Low: "text-emerald-300",
 };
 
 export const PRIORITY_DOTS: Record<TaskPriority, string> = {
-  High: "bg-rose-500",
-  Medium: "bg-amber-500",
-  Low: "bg-emerald-500",
+  High: "bg-rose-400",
+  Medium: "bg-amber-400",
+  Low: "bg-emerald-400",
 };
 
 /** Normalize/validate one raw task object coming from the AI or heuristics. */
@@ -81,10 +81,13 @@ export function sanitizeTask(raw: unknown, fallbackId: string): SyncTask | null 
   const priorities: TaskPriority[] = ["High", "Medium", "Low"];
   const priority = priorities.includes(r.priority as TaskPriority) ? (r.priority as TaskPriority) : "Medium";
 
+  // Keep the AI's raw dueDate string (validated as parseable) — the route-level
+  // normalizer converts timezone-naive datetimes into Budapest wall-clock ISO
+  // exactly as the extraction prompt requests them.
   let dueDate = "unknown";
   if (typeof r.dueDate === "string" && r.dueDate.trim() && r.dueDate.trim().toLowerCase() !== "unknown") {
-    const d = new Date(r.dueDate);
-    if (!Number.isNaN(d.getTime())) dueDate = d.toISOString();
+    const d = new Date(r.dueDate.trim());
+    if (!Number.isNaN(d.getTime())) dueDate = r.dueDate.trim();
   }
 
   return {

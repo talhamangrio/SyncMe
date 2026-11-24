@@ -53,7 +53,7 @@ export default function RootLayout({
           Skip to content
         </a>
         {children}
-        <Toaster theme="light" position="top-right" richColors closeButton />
+        <Toaster theme="dark" position="top-right" richColors closeButton />
       </body>
     </html>
   );

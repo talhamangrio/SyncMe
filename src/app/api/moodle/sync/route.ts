@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { fetchIcsFeed } from "@/lib/ics";
+import { dropExpiredTasks, sortChronologically, toBudapestIso } from "@/lib/dates";
 import type { MoodleSyncResponse, SyncTask, TaskPriority } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -7,7 +8,10 @@ export const dynamic = "force-dynamic";
 /**
  * POST /api/moodle/sync — accepts { icsUrl: string }, fetches the Moodle .ics
  * feed server-side, parses VEVENT blocks (SUMMARY, DTSTART, DTEND, DESCRIPTION)
- * and returns normalized Moodle tasks in the SyncMe JSON schema.
+ * and returns normalized Moodle tasks in the SyncMe JSON schema. Every dueDate
+ * is normalized to ISO-8601 `YYYY-MM-DDTHH:mm:ss` (Europe/Budapest), events
+ * dated strictly before today are deterministically dropped, and the list is
+ * sorted strictly ascending chronological (earliest upcoming first).
  */
 export async function POST(req: NextRequest) {
   try {
@@ -21,30 +25,31 @@ export async function POST(req: NextRequest) {
     }
 
     const events = await fetchIcsFeed(icsUrl);
-    const now = Date.now();
+    const now = new Date();
 
-    const tasks: SyncTask[] = events
+    const candidates: SyncTask[] = events
       .filter((e) => e.start !== null)
       .map((e, i) => {
         const start = e.start as Date;
-        const hoursUntil = (start.getTime() - now) / 3_600_000;
+        const hoursUntil = (start.getTime() - now.getTime()) / 3_600_000;
         const priority: TaskPriority =
           hoursUntil < 0 ? "Low" : hoursUntil <= 72 ? "High" : hoursUntil <= 24 * 7 ? "Medium" : "Low";
         return {
           id: `moodle-${e.uid}-${i}`,
           title: e.summary,
           category: "Moodle" as const,
-          dueDate: start.toISOString(),
+          dueDate: toBudapestIso(start),
           priority,
           actionSummary: e.description
             ? e.description.slice(0, 200)
             : `Moodle calendar event: ${e.summary}`,
           sourceEmailSubject: "Moodle .ics calendar feed",
         };
-      })
-      .filter((t) => Date.parse(t.dueDate) > now - 86_400_000) // drop events older than 24h
-      .sort((a, b) => Date.parse(a.dueDate) - Date.parse(b.dueDate))
-      .slice(0, 25);
+      });
+
+    // Deterministic expiration guard: drop every event whose day is strictly
+    // earlier than today (Europe/Budapest), then sort earliest-first.
+    const tasks = sortChronologically(dropExpiredTasks(candidates, now)).slice(0, 25);
 
     return NextResponse.json({ ok: true, tasks } satisfies MoodleSyncResponse);
   } catch (err) {
